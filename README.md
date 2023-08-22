@@ -82,8 +82,15 @@
     masks in a sub directory. These masks are used later as extent inputs in the Zonal Statistics Masked script.
 
 ##### 02 Zonal Stats
+    This script calulates zonal statistics for each area of interest and carbon dataset combination without applying any 
+    additional masking.
 
 ##### 03 Zonal Stats Masked
+    This script calculates zonal statistics for each area of interest and carbon dataset combination and applies each of 
+    two masks:
+    
+    _tcd: considers tree cover density > 30 
+    _tcd_gain: considers tree cover density > 30 or gain = 1
 
 ##### 04 Zonal Stats Annualized
 
@@ -92,6 +99,12 @@
 ### Running the Code
 
 ### Other Notes
+    Updates in progress include...
+    
+    A data download / prep script that will automatically download new data inputs from 
+    s3 and build out the correct folder structure within a given workspace. 
+
+    Additional functions to clean and export annualized results
 
 #### Contact Info
     Erin Glen - erin.glen@wri.org
