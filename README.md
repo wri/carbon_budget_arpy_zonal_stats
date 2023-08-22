@@ -93,10 +93,19 @@
     _tcd_gain: considers tree cover density > 30 or gain = 1
 
 ##### 04 Zonal Stats Annualized
+    This script calculates annual emissions in each area of interest 
 
 ##### 05 Zonal Stats Cleaned
+    This script utilizes pandas to compile the results of all analyses and export them into a user-friendly csv file
 
 ### Running the Code
+    To run the code, you will need to set up a workspace with inputs organized into the correct directories. A future update 
+    will include a script which automatically downloads these datasets and creates the correct directories. Until this is available, 
+    please reach out to erin.glen@wri.org for more information. 
+
+    This code is built on arcpy, which will require a valid ArcGIS license to run. 
+
+    Once all inputs and directories are set up, the only input required from the user is the workspace path. 
 
 ### Other Notes
     Updates in progress include...
