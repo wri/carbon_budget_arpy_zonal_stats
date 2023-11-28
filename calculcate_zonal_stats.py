@@ -1,7 +1,6 @@
 import arcpy
 import os
-from funcs import ZonalStats, ZonalStatsClean, ZonalStatsAnnualized, ZonalStatsMasked, create_masks, zonal_stats_clean, \
-    zonal_stats_masked, zonal_stats
+from funcs import create_masks, zonal_stats_clean, zonal_stats_masked, zonal_stats, zonal_stats_annualized
 
 """
 Set the workspace to the folder which contains carbon value rasters for both AOIs:
@@ -26,8 +25,8 @@ zonal_stats_masked(input_folder)
 
 #Execute Calculcate Zonal Stats Annualized...
 print("Step 3: Calculating Zonal Stats Annualized... \n")
-input_folder = os.path.join(arcpy.env.workspace,"TCL")
-ZonalStatsAnnualized(input_folder)
+annual_input_folder = os.path.join(arcpy.env.workspace, "TCL")
+zonal_stats_annualized(annual_input_folder)
 
 #Execute Zonal Stats Clean...
 print("Step 3: Cleaning Zonal Stats... \n")

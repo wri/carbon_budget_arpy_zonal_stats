@@ -106,60 +106,49 @@ def zonal_stats_masked(input_folder):
         mask_list = list_files_in_directory(mask_tiles, '.tif')
 
         for raster in raster_list:
-            raster_name = os.path.splitext(os.path.basename(raster))[0]
+            raster_obj = arcpy.Raster(raster)
 
             for mask in mask_list:
-                mask_name = os.path.splitext(os.path.basename(mask))[0].split("_", 2)[2]
+                mask_obj = arcpy.Raster(mask)
 
-                output_name = f"{aoi_name}_{raster_name}_{mask_name}.dbf"
-                output_path = os.path.join(output_folder, output_name)
+                # Check if spatial references and extents are the same
+                if (raster_obj.extent == mask_obj.extent and
+                        raster_obj.spatialReference.name == mask_obj.spatialReference.name):
 
-                masked_raster = arcpy.sa.Times(raster, mask)
-                arcpy.gp.ZonalStatisticsAsTable_sa(aoi, "GID_0", masked_raster, output_path, "DATA", "SUM")
+                    masked_raster = arcpy.sa.Times(raster_obj, mask_obj)
+                    # ... [rest of your code] ...
+                else:
+                    print(f"Spatial references or extents do not match for {raster} and {mask}")
 
-                csv_file = f"{aoi_name}_{raster_name}_{mask_name}.csv"
-                arcpy.TableToTable_conversion(output_path, output_folder, csv_file)
-                print(f"Exporting mask output {csv_file}")
+def process_annual_zonal_stats(aoi, raster_folder, output_folder):
+    raster_list = list_files_in_directory(raster_folder, 'emis.tif')
 
-def ZonalStatsAnnualized(input_folder):
-    # Get a list of shapefiles in the input folder
-    input_folder = os.path.join(arcpy.env.workspace, "TCL")
-    aoi_list = [os.path.join(input_folder, f) for f in os.listdir(input_folder) if f.endswith('clip.tif')]
+    for raster in raster_list:
+        raster_name = os.path.splitext(os.path.basename(raster))[0]
+        print(f'Calculating zonal statistics for {raster_name}: \n')
 
-    print(aoi_list)
+        output_name = f"{os.path.splitext(os.path.basename(aoi))[0]}_{raster_name}.dbf"
+        output_path = os.path.join(output_folder, output_name)
 
-    # Loop through each area of interest
+        arcpy.gp.ZonalStatisticsAsTable_sa(aoi, "Value", raster, output_path, "DATA", "SUM")
+        csv_file = f"{os.path.splitext(os.path.basename(aoi))[0]}_{raster_name}.csv"
+        arcpy.TableToTable_conversion(output_path, output_folder, csv_file)
+
+def zonal_stats_annualized(input_folder):
+    aoi_list = list_files_in_directory(input_folder, 'clip.tif')
+
     for aoi in aoi_list:
-        # Extract the name of the AOI from the file path
         aoi_name = os.path.splitext(os.path.basename(aoi))[0]
-        print("Now processing " + aoi_name + ": \n")
+        print(f"Now processing {aoi_name}: \n")
 
         if "IDN" in aoi_name:
-            raster_folder = os.path.join(arcpy.env.workspace,"Input","00N_110E")
+            raster_folder = os.path.join(arcpy.env.workspace, "Input", "00N_110E")
             output_folder = os.path.join(arcpy.env.workspace, "Outputs", "Annual")
         else:
             raster_folder = os.path.join(arcpy.env.workspace, "Input", "20N_20W")
-            output_folder = os.path.join(arcpy.env.workspace, "Outputs","Annual")
+            output_folder = os.path.join(arcpy.env.workspace, "Outputs", "Annual")
 
-        # Get a list of rasters in the raster folder
-        raster_list = [os.path.join(raster_folder, f) for f in os.listdir(raster_folder) if "emis" in f and f.endswith('tif')]
-
-        # Loop through each raster and calculate zonal statistics as table
-        for raster in raster_list:
-            # Extract the name of the raster from the file path
-            raster_name = os.path.splitext(os.path.basename(raster))[0]
-            print('Calculating zonal statistics for ' + raster_name + ": \n")
-
-            # Create a name for the output table by concatenating the AOI name and raster name
-            output_name = "{}_{}.dbf".format(aoi_name, raster_name)
-            output_path = os.path.join(output_folder, output_name)
-
-            # Calculate zonal statistics as table for the current raster and AOI
-            arcpy.gp.ZonalStatisticsAsTable_sa(aoi, "Value", raster, output_path, "DATA", "SUM")
-
-            # convert each output to csv
-            csv_file = "{}_{}.csv".format(aoi_name, raster_name)
-            arcpy.TableToTable_conversion(output_path, output_folder, csv_file)
+        process_annual_zonal_stats(aoi, raster_folder, output_folder)
 
 def load_and_process_csv(file_path, file_name):
     csv_df = pd.read_csv(file_path)
