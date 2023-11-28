@@ -7,7 +7,9 @@ import pandas as pd
 import arcpy
 from funcs import ZonalStatsClean
 
-arcpy.env.workspace = r"U:\eglen\Data\CarbonFlux_QA_2023"
+#TODO: Change workspace using working_directory
+
+arcpy.env.workspace = r"C:\GIS\carbon_model\CarbonFlux_QA_2023"
 arcpy.env.overwriteOutput = True
 
 ZonalStatsClean(arcpy.env.workspace)
