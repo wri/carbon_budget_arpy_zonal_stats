@@ -2,10 +2,12 @@ import arcpy
 from funcs import ZonalStats
 import os
 
+#TODO: Change workspace using working_directory
+
 arcpy.env.overwriteOutput = True
 
 # Set the workspace and input/output folders
-arcpy.env.workspace = r"U:\eglen\Data\CarbonFlux_QA_2023"
+arcpy.env.workspace = r"C:\GIS\carbon_model\CarbonFlux_QA_2023"
 print(arcpy.env.workspace)
 input_folder = os.path.join(arcpy.env.workspace,"Input","AOIS")
 
