@@ -178,3 +178,5 @@ def zonal_stats_clean(input_folders):
     output_path = os.path.join(arcpy.env.workspace, "Outputs", "CSV", "output.csv")
     df.to_csv(output_path, index=False)
 
+#todo solve mask output problem
+#todo solve annualized output and final csv problem
