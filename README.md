@@ -21,8 +21,8 @@
 #### Carbon Flux Model Data:
 
     Three separate outputs from the Carbon Flux Model, each at two different extents, are used in as inputs in 
-    this tool. This is a total of six different inouts. Inputs include gross emissions (all gasses), gross removals
-    (CO2), and net flux (CO2e). All are in inuts Mg / pixel. Calculations are run using both the forest extent and
+    this tool. This is a total of six different inputs. Inputs include gross emissions (all gasses), gross removals
+    (CO2), and net flux (CO2e). All are in inputs Mg / pixel. Calculations are run using both the forest extent and
     full extent outputs. 
 
 | AOI | Extent | Type            | Units         | Tile     |

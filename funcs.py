@@ -1,6 +1,11 @@
 import os
 import arcpy
 import pandas as pd
+import logging
+import re
+from subprocess import Popen, PIPE, STDOUT
+
+#TODO: Make sure masks are being written out to their correct folders. Include one with mangrove, and one without?
 
 TCD_THRESHOLD = 30
 GAIN_FLAG = True
@@ -180,3 +185,126 @@ def zonal_stats_clean(input_folders):
 
 #todo solve mask output problem
 #todo solve annualized output and final csv problem
+
+# Downloads individual tiles from s3
+    # source = source file on s3
+    # dest = where to download
+    # pattern = pattern for file name
+def s3_file_download(source, dest, pattern):
+
+    # Retrieves the s3 directory and name of the tile from the full path name
+    dir = get_tile_dir(source)
+    file_name = get_tile_name(source)
+
+    try:
+        tile_id = get_tile_id(file_name)
+    except:
+        pass
+
+    # Special download procedures for tree cover gain because the tiles have no pattern, just an ID.
+    # Tree cover gain tiles are renamed as their downloaded to get a pattern added to them.
+    if dir == cn.gain_dir[:-1]: # Delete last character of gain_dir because it has the terminal / while dir does not have terminal /
+        local_file_name = f'{tile_id}_{pattern}.tif'
+        print(f'Option 1: Checking if {local_file_name} is already downloaded...')
+        if os.path.exists(os.path.join(dest, local_file_name)):
+            print(f'Option 1 success: {os.path.join(dest, local_file_name)} already downloaded', "\n")
+            return
+        else:
+            print(f'Option 1 failure: {local_file_name} is not already downloaded.')
+            print(f'Option 2: Checking for tile {source} on s3...')
+
+            # If the tile isn't already downloaded, download is attempted
+            source = os.path.join(dir, file_name)
+
+            # cmd = ['aws', 's3', 'cp', source, dest, '--no-sign-request', '--only-show-errors']
+            cmd = ['aws', 's3', 'cp', source, f'{dest}{local_file_name}',
+                   '--request-payer', 'requester', '--only-show-errors']
+            log_subprocess_output_full(cmd)
+            if os.path.exists(os.path.join(dest, local_file_name)):
+                print_log(f'  Option 2 success: Tile {source} found on s3 and downloaded', "\n")
+                return
+            else:
+                print_log(
+                    f'  Option 2 failure: Tile {source} not found on s3. Tile not found but it seems it should be. Check file paths and names.', "\n")
+
+    # All other tiles besides tree cover gain
+    else:
+        print_log(f'Option 1: Checking if {file_name} is already downloaded...')
+        if os.path.exists(os.path.join(dest, file_name)):
+            print_log(f'  Option 1 success: {os.path.join(dest, file_name)} already downloaded', "\n")
+            return
+        else:
+            print_log(f'Option 1 failure: {file_name} is not already downloaded.')
+            print_log(f'Option 2: Checking for tile {source} on s3...')
+
+            # If the tile isn't already downloaded, download is attempted
+            source = os.path.join(dir, file_name)
+
+            # cmd = ['aws', 's3', 'cp', source, dest, '--no-sign-request', '--only-show-errors']
+            cmd = ['aws', 's3', 'cp', source, dest, '--only-show-errors']
+            log_subprocess_output_full(cmd)
+            if os.path.exists(os.path.join(dest, file_name)):
+                print_log(f'Option 2 success: Tile {source} found on s3 and downloaded', "\n")
+                return
+            else:
+                print_log(f'Option 2 failure: Tile {source} not found on s3. Tile not found but it seems it should be. Check file paths and names.', "\n")
+
+def s3_flexible_download(s3_dir, s3_pattern, local_dir, local_pattern, tile_id_list):
+
+    # Creates a full download name (path and file)
+    for tile_id in tile_id_list:
+        if s3_pattern in [cn.pattern_tcd, cn.pattern_pixel_area, cn.pattern_loss]:
+            source = f'{s3_dir}{s3_pattern}_{tile_id}.tif'
+        elif s3_pattern in [cn.pattern_data_lake]:
+            source = f'{s3_dir}{tile_id}.tif'
+        else:  # For every other type of tile
+            source = f'{s3_dir}{tile_id}_{s3_pattern}.tif'
+
+        s3_file_download(source, local_dir, local_pattern)
+
+# Gets the directory of the tile
+def get_tile_dir(tile):
+    tile_dir = os.path.split(tile)[0]
+    return tile_dir
+
+def get_tile_name(tile):
+    tile_name = os.path.split(tile)[1]
+    return tile_name
+
+# Gets the tile id from the full tile name using a regular expression
+def get_tile_id(tile_name):
+    tile_id = re.search("[0-9]{2}[A-Z][_][0-9]{3}[A-Z]", tile_name).group()
+    return tile_id
+
+def log_subprocess_output_full(cmd):
+    # Solution for adding subprocess output to log is from https://stackoverflow.com/questions/21953835/run-subprocess-and-print-output-to-logging
+    process = Popen(cmd, stdout=PIPE, stderr=STDOUT)
+    pipe = process.stdout
+    with pipe:
+
+        # Reads all the output into a string
+        for full_out in iter(pipe.readline, b''):  # b"\n"-separated lines
+
+            # Separates the string into an array, where each entry is one line of output
+            line_array = full_out.splitlines()
+
+            # For reasons I don't know, the array is backwards, so this prints it out in reverse (i.e. correct) order
+            for line in reversed(line_array):
+                logging.info(line.decode(
+                    "utf-8"))  # https://stackoverflow.com/questions/37016946/remove-b-character-do-in-front-of-a-string-literal-in-python-3, answer by krock
+                print(line.decode(
+                    "utf-8"))  # https://stackoverflow.com/questions/37016946/remove-b-character-do-in-front-of-a-string-literal-in-python-3, answer by krock
+
+def print_log(*args):
+
+    # Empty string
+    full_statement = str(object='')
+
+    # Concatenates all individuals strings to the complete line to print
+    for arg in args:
+        full_statement = full_statement + str(arg) + " "
+
+    logging.info(full_statement)
+
+    # Prints to console
+    print("LOG: " + full_statement)
