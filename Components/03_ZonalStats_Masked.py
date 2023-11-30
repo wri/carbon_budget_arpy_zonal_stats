@@ -1,7 +1,7 @@
 import arcpy
 import os
 import pandas
-from funcs import ZonalStatsMasked
+from funcs_new import ZonalStatsMasked
 
 #TODO: Change workspace using working_directory
 

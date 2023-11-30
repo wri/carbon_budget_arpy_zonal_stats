@@ -1,7 +1,7 @@
 import arcpy
 import os
 import pandas as pd
-from funcs import ZonalStatsAnnualized
+from funcs_new import ZonalStatsAnnualized
 arcpy.env.overwriteOutput = True
 
 #TODO: Change workspace using working_directory

@@ -5,7 +5,7 @@ outputs and write the sum fields to a new dataframe, then export this dataframe 
 import os
 import pandas as pd
 import arcpy
-from funcs import ZonalStatsClean
+from funcs_new import ZonalStatsClean
 
 #TODO: Change workspace using working_directory
 

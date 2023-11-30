@@ -19,12 +19,14 @@ loss_years = 22
 model_run_date = '20231114'
 
 # List of tile_ids to process (change according to which tiles overlap with your AOIS shapefiles)
-tile_list = ['20N_020W', '00N_110E']
+tile_list = ['20N_020W','00N_110E']
 
 #####################################################################################
 
-# Directories to be created/ checked
+# Setting the arcpy environ workspace
 arcpy.env.workspace = working_directory
+
+# Directories to be created/ checked
 aois_folder = os.path.join(arcpy.env.workspace,"AOIS")
 input_folder = os.path.join(arcpy.env.workspace,"Input")
 mask_folder = os.path.join(arcpy.env.workspace,"Mask")

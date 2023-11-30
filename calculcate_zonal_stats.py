@@ -1,6 +1,6 @@
 import arcpy
 import os
-from funcs import create_masks, zonal_stats_clean, zonal_stats_masked, zonal_stats, zonal_stats_annualized
+from funcs_new import create_masks, zonal_stats_clean, zonal_stats_masked, zonal_stats, zonal_stats_annualized
 from constants_and_names import working_directory, overwrite_output, aois_folder
 
 #TODO: Line 14 - Does overwrite option need to be overwritten to true there?

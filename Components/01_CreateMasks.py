@@ -1,5 +1,5 @@
 import arcpy
-from funcs import CreateMasks
+from funcs_new import CreateMasks
 
 #TODO: Change workspace using working_directory
 

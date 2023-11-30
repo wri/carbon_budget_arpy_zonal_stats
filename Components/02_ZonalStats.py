@@ -1,5 +1,5 @@
 import arcpy
-from funcs import ZonalStats
+from funcs_new import ZonalStats
 import os
 
 #TODO: Change workspace using working_directory
