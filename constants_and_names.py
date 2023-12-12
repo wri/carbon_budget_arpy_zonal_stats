@@ -7,7 +7,7 @@ import os
 
 # Set the working directory to the folder which contains the AOIS subfolder
     # AOIS folder = folder named 'AOIS' that contains the GADM shapefiles
-working_directory = r"C:\GIS\carbon_model\CarbonFlux_QA_v1.2.3"
+working_directory = r"C:\GIS\carbon_model\CarbonFlux_QA_v1.3.1"
 
 # Whether you want to overwrite previous QA outputs
 overwrite_arcgis_output = True
@@ -15,9 +15,9 @@ overwrite_arcgis_output = True
 # With each model update, change loss years and model_run_date
     # loss_years = number of years of tree cover loss (if input loss raster is changed, this must be changed, too)
     # model_run_date = s3 directory where per-pixel outputs from most recent model run are saved
-version = '1.2.3'
+version = '1.3.1'
 loss_years = 22
-model_run_date = '20230407'
+model_run_date = '20231114'
 
 # List of tile_ids to process (change according to which tiles overlap with your AOIS shapefiles)
 tile_list = ['20N_020W','00N_110E']

@@ -106,7 +106,7 @@ def process_raster(raster, gain_tiles, whrc_tiles, mangrove_tiles, plantation_ti
         tcd_whrc_mask = arcpy.sa.Con(arcpy.Raster(tcd_whrc_raster) > 0, 1, 0)
 
         #Saving tcd_whrc mask
-        mask_path_tcd = os.path.join(mask_tiles, f'{tile_id}_tcd{tcd_val}v2')
+        mask_path_tcd = os.path.join(mask_tiles, f'{tile_id}_tcd{tcd_val}')
         print(f'Saving {mask_path_tcd}.tif')
         tcd_whrc_mask.save(f'{mask_path_tcd}.tif')
 
@@ -303,11 +303,13 @@ def ZonalStatsClean(input_folders, csv_folder) -> object:
 
                 # Define mask of calc
                 if "plantation." in file:
-                    mask = "gain, tcd, biomass, mangrove, plantation"
+                    mask = "tcd, gain, mangrove, plantation"
                 elif "mangrove." in file:
-                    mask = "gain, tcd, biomass, mangrove"
+                    mask = "tcd, gain, mangrove"
                 elif "gain." in file:
-                    mask = "gain"
+                    mask = "tcd, gain"
+                elif "tcd" in file:
+                    mask = "tcd"
                 else:
                     mask = "no mask"
                 csv_df["Mask"] = mask
