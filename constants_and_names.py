@@ -7,24 +7,30 @@ import os
 
 # Set the working directory to the folder which contains the AOIS subfolder
     # AOIS folder = folder named 'AOIS' that contains the GADM shapefiles
-working_directory = r"C:\GIS\carbon_model\CarbonFlux_QA_2023"
+working_directory = r"C:\GIS\carbon_model\CarbonFlux_QA_v1.2.3"
 
 # Whether you want to overwrite previous QA outputs
-overwrite_output = True
+overwrite_arcgis_output = True
 
 # With each model update, change loss years and model_run_date
     # loss_years = number of years of tree cover loss (if input loss raster is changed, this must be changed, too)
     # model_run_date = s3 directory where per-pixel outputs from most recent model run are saved
+version = '1.2.3'
 loss_years = 22
-model_run_date = '20231114'
+model_run_date = '20230407'
 
 # List of tile_ids to process (change according to which tiles overlap with your AOIS shapefiles)
 tile_list = ['20N_020W','00N_110E']
+
+#List of tree cover density thresholds to mask by
+tcd_threshold = [30, 75]
+gain = True
 
 #####################################################################################
 
 # Setting the arcpy environ workspace
 arcpy.env.workspace = working_directory
+arcpy.env.overwriteOutput = overwrite_arcgis_output
 
 # Directories to be created/ checked
 aois_folder = os.path.join(arcpy.env.workspace,"AOIS")
@@ -75,7 +81,6 @@ netflux_full_extent_s3_pattern = f'net_flux_Mg_CO2e_pixel_biomass_soil_full_exte
 gain_s3_path = 's3://gfw-data-lake/umd_tree_cover_gain_from_height/v202206/raster/epsg-4326/10/40000/gain/geotiff/'
 gain_s3_pattern = ''
 gain_local_pattern = 'tree_cover_gain_2000_2020'
-#TODO: CHECK THIS PATTERN ACROSS THE CODE?
 
 # Processed mangrove aboveground biomass in the year 2000
 mangrove_s3_path = os.path.join(s3_base_dir, 'mangrove_biomass/processed/standard/20190220/')
@@ -100,9 +105,6 @@ loss_s3_pattern = 'GFW2022'
 
 ###################################
 #TODO: DO WE NEED THESE VARIABLES ANYWHERE?
-#version = '1.3.1'
-#version_filename = version.replace('.', '_')
 #gain_years = 20
-#canopy_threshold = 30
 #pattern_model_extent = 'model_extent'
 #model_extent_dir = os.path.join(s3_base_dir, 'model_extent/standard/20231114/')

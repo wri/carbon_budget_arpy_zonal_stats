@@ -1,16 +1,7 @@
-import arcpy
-from funcs_new import ZonalStats
-import os
+import constants_and_names as cn
+from funcs import zonal_stats
 
-#TODO: Change workspace using working_directory
-
-arcpy.env.overwriteOutput = True
-
-# Set the workspace and input/output folders
-arcpy.env.workspace = r"C:\GIS\carbon_model\CarbonFlux_QA_2023"
-print(arcpy.env.workspace)
-input_folder = os.path.join(arcpy.env.workspace, "AOIS")
-
-ZonalStats(input_folder)
+# Set the input folder to the AOIS folder that contains the GADM shapefiles
+zonal_stats(cn.aois_folder)
 
 

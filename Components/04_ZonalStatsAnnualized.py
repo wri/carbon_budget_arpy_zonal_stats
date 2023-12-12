@@ -1,13 +1,7 @@
 import arcpy
-import os
-import pandas as pd
-from funcs_new import ZonalStatsAnnualized
-arcpy.env.overwriteOutput = True
+import constants_and_names as cn
+from funcs import zonal_stats_annualized
 
-#TODO: Change workspace using working_directory
-
-# Set the workspace and input/output folders
-arcpy.env.workspace = r"C:\GIS\carbon_model\CarbonFlux_QA_2023"
-
-ZonalStatsAnnualized(arcpy.env.workspace)
+#Set the input folders
+zonal_stats_annualized(cn.tcl_folder, cn.input_folder, cn.annual_folder)
 

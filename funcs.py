@@ -6,9 +6,7 @@ import re
 from subprocess import Popen, PIPE, STDOUT
 import constants_and_names as cn
 
-#TODO: Make sure masks are being written out to their correct folders. Include one with mangrove, and one without?
-
-def DownloadFiles(working_directory):
+def DownloadFiles():
     # Step 1: Checking to see if the AOIS folder exists and if it contains a shapefile
     print("Step 0.1: Checking to see if AOIS folder exists and contains a shapefile")
     if os.path.isdir(cn.aois_folder):
@@ -36,7 +34,6 @@ def DownloadFiles(working_directory):
     for tile in cn.tile_list:
         tile_id_folder = os.path.join(cn.mask_output_folder, tile)
         folder_check(tile_id_folder)
-    # TODO: Update code so that the mask output gets written to the tile folder rather than the Mask, Mask folder
 
     # Step 4: Create Output folder with Annual folder, CSV folder, and subfolder for each tile in tile_list
     print("Step 0.4: Creating Output folder structure")
@@ -74,338 +71,281 @@ def DownloadFiles(working_directory):
     s3_flexible_download(cn.tile_list, cn.tcd_s3_path, cn.tcd_s3_pattern, cn.tcd_folder)
     s3_flexible_download(cn.tile_list, cn.whrc_s3_path, cn.whrc_s3_pattern, cn.whrc_folder)
 
-    # Step 8: Download TCL folder tiles
+    #TODO: Step 8: Download TCL folder tiles
 
-def CreateMasks(input_folder):
-    mask_inputs = os.path.join(arcpy.env.workspace, "Mask", "Inputs")
-    mask_tiles = os.path.join(arcpy.env.workspace, "Mask","Mask")
-
-    tcd_tiles = os.path.join(mask_inputs, "TCD")
-    gain_tiles = os.path.join(mask_inputs, "Gain")
-    whrc_tiles = os.path.join(mask_inputs, "WHRC")
-    mangrove_tiles = os.path.join(mask_inputs, "Mangrove")
-
-    TDC_threshold = 30
-    gain = True
-
+def create_masks(tcd_tiles, gain_tiles, whrc_tiles, mangrove_tiles, plantation_tiles, tcd_threshold, gain):
     # Get a list of rasters in the raster folder
     tcd_list = [os.path.join(tcd_tiles, f) for f in os.listdir(tcd_tiles) if f.endswith('.tif')]
-    print(tcd_list)
 
-    # Loop through each raster and calculate zonal statistics as table
     for raster in tcd_list:
-        # Extract the name of the raster from the file path
         raster_name = os.path.splitext(os.path.basename(raster))[0]
-        print(raster_name)
-        tile_id = raster_name.split("_", 3)[3]
-        print(tile_id)
-        gain_raster = os.path.join(gain_tiles, str(tile_id + '_gain.tif'))
-        mangrove_raster = os.path.join(mangrove_tiles, str(tile_id + '_mangrove_agb_t_ha_2000_rewindow.tif'))
-        whrc_raster = os.path.join(whrc_tiles, str(tile_id + '_t_aboveground_biomass_ha_2000.tif'))
+        tile_id = get_tile_id(raster_name)
+        mask_tiles = os.path.join(cn.mask_output_folder, tile_id)
 
-        mask_path_tcd = os.path.join(mask_tiles, str(tile_id + '_tcd.tif'))
-        mask_path_tcd_gain = os.path.join(mask_tiles, str(tile_id + '_tcd_gain.tif'))
-        print('Creating masks for ' + tile_id + ": \n")
+        process_raster(raster, gain_tiles, whrc_tiles, mangrove_tiles, plantation_tiles, mask_tiles, tcd_threshold, gain)
 
-        # Conditional logic for TCD
-        tcd_raster = arcpy.sa.Con(arcpy.Raster(raster) > 30, 1, 0)
-        # tcd_raster.save(mask_path_tcd)
+def get_tile_id(raster_name):
+    return raster_name.split("_", 3)[3]
 
-        # Conditional logic for Gain
-        gain_raster: object = arcpy.sa.Con(arcpy.Raster(gain_raster) > 0, 1, 0)
+def process_raster(raster, gain_tiles, whrc_tiles, mangrove_tiles, plantation_tiles, mask_tiles, tcd_threshold, gain):
+    tile_id = get_tile_id(os.path.splitext(os.path.basename(raster))[0])
 
-        # Conditional logic for WHRC
-        whrc_raster = arcpy.sa.Con(arcpy.Raster(whrc_raster) > 0, 1, 0)
+    #Paths to Mask, Input files
+    gain_raster_path = os.path.join(gain_tiles, f'{tile_id}_{cn.gain_local_pattern}.tif')
+    whrc_raster_path = os.path.join(whrc_tiles, f'{tile_id}_{cn.whrc_s3_pattern}.tif')
+    mangrove_raster_path = os.path.join(mangrove_tiles, f'{tile_id}_{cn.mangrove_s3_pattern}.tif')
+    plantation_raster_path = os.path.join(plantation_tiles, f'{tile_id}_{cn.plantation_s3_pattern}.tif')
 
-        # Conditional logic for Mangrove
-        mangrove_raster = arcpy.sa.Con(arcpy.Raster(mangrove_raster) > 0, 1, 0)
+    print(f'Creating masks for {tile_id}: \n')
 
-        # Add raster calculator logic...
-        output_times = arcpy.sa.Times(tcd_raster, whrc_raster)
-        output_plus = arcpy.sa.Plus(output_times, gain_raster)
-        output_plus_2 = arcpy.sa.Plus(output_plus, mangrove_raster)
-        output_raster = arcpy.sa.Con(arcpy.Raster(output_plus_2) > 0, 1, 0)
+    for tcd_val in tcd_threshold:
+        # Conditional logic for where TCD AND biomass
+        tcd_raster = arcpy.sa.Con(arcpy.Raster(raster) > tcd_val, 1, 0) #TODO: Should this be greater than or equal to threshold?
+        whrc_raster = arcpy.sa.Con(arcpy.Raster(whrc_raster_path) > 0, 1, 0)
+        tcd_whrc_raster = arcpy.sa.Times(tcd_raster, whrc_raster)
+        tcd_whrc_mask = arcpy.sa.Con(arcpy.Raster(tcd_whrc_raster) > 0, 1, 0)
 
-        output_raster.save(mask_path_tcd_gain)
+        #Saving tcd_whrc mask
+        mask_path_tcd = os.path.join(mask_tiles, f'{tile_id}_tcd{tcd_val}v2')
+        print(f'Saving {mask_path_tcd}.tif')
+        tcd_whrc_mask.save(f'{mask_path_tcd}.tif')
 
-    TDC_threshold = 30
-    gain = False
+        # Conditional logic for TCD OR gain
+        if gain == True:
+            gain_raster = arcpy.sa.Con(arcpy.Raster(gain_raster_path) > 0, 1, 0)
+            tcd_gain_raster = arcpy.ia.Merge([tcd_whrc_mask, gain_raster], "SUM")
+            tcd_gain_mask = arcpy.sa.Con(arcpy.Raster(tcd_gain_raster) > 0, 1, 0)
 
-    # Get a list of rasters in the raster folder
-    tcd_list = [os.path.join(tcd_tiles, f) for f in os.listdir(tcd_tiles) if f.endswith('.tif')]
-    print(tcd_list)
+            # Saving tcd_gain mask
+            mask_path_tcd_gain = f'{mask_path_tcd}_gain'
+            print(f'Saving {mask_path_tcd_gain}.tif')
+            tcd_gain_mask.save(f'{mask_path_tcd_gain}.tif')
+        else:
+            mask_path_tcd_gain = mask_path_tcd
+            tcd_gain_mask = tcd_whrc_mask
 
-    # Loop through each raster and calculate zonal statistics as table
-    for raster in tcd_list:
-        # Extract the name of the raster from the file path
-        raster_name = os.path.splitext(os.path.basename(raster))[0]
-        # print(raster_name)
-        tile_id = raster_name.split("_", 3)[3]
-        # print(tile_id)
-        gain_raster = os.path.join(gain_tiles, str(tile_id + '_gain.tif'))
-        mangrove_raster = os.path.join(mangrove_tiles, str(tile_id + '_mangrove_agb_t_ha_2000_rewindow.tif'))
-        whrc_raster = os.path.join(whrc_tiles, str(tile_id + '_t_aboveground_biomass_ha_2000.tif'))
+        # Conditional logic for TCD, gain, OR mangrove
+        if os.path.exists(mangrove_raster_path):
+            mangrove_raster = arcpy.sa.Con(arcpy.Raster(mangrove_raster_path) > 0, 1, 0)
+            tcd_gain_mangrove_raster = arcpy.ia.Merge([tcd_gain_mask, mangrove_raster], "SUM")
+            tcd_gain_mangrove_mask = arcpy.sa.Con(arcpy.Raster(tcd_gain_mangrove_raster) > 0, 1, 0)
 
-        mask_path_tcd = os.path.join(mask_tiles, str(tile_id + '_tcd.tif'))
-        mask_path_tcd_gain = os.path.join(mask_tiles, str(tile_id + '_tcd_gain.tif'))
-        print('Creating masks for ' + tile_id + ": \n")
+            # Saving tcd_gain_mangrove mask
+            mask_path_tcd_gain_mangrove = f'{mask_path_tcd_gain}_mangrove'
+            print(f'Saving {mask_path_tcd_gain_mangrove}.tif')
+            tcd_gain_mangrove_mask.save(f'{mask_path_tcd_gain_mangrove}.tif')
+        else:
+            mask_path_tcd_gain_mangrove = mask_path_tcd_gain
+            tcd_gain_mangrove_mask = tcd_gain_mask
 
-        # Conditional logic for TCD
-        tcd_raster = arcpy.sa.Con(arcpy.Raster(raster) > 30, 1, 0)
-        # tcd_raster.save(mask_path_tcd)
+        # Conditional logic for TCD, gain, mangrove, OR plantations
+        if os.path.exists(plantation_raster_path):
+            plantation_raster = arcpy.sa.Con(arcpy.Raster(plantation_raster_path) > 0, 1, 0)
+            tcd_gain_mangrove_plantation_raster = arcpy.ia.Merge([tcd_gain_mangrove_mask, plantation_raster], "SUM")
+            tcd_gain_mangrove_plantation_mask = arcpy.sa.Con(arcpy.Raster(tcd_gain_mangrove_plantation_raster) > 0, 1, 0)
 
-        # Conditional logic for Gain
-        gain_raster: object = arcpy.sa.Con(arcpy.Raster(gain_raster) > 0, 0, 0)
+            # Saving tcd_gain_mangrove_plantation mask
+            mask_path_tcd_gain_mangrove_plantation = f'{mask_path_tcd_gain_mangrove}_plantation'
+            print(f'Saving {mask_path_tcd_gain_mangrove_plantation}.tif')
+            tcd_gain_mangrove_plantation_mask.save(f'{mask_path_tcd_gain_mangrove_plantation}.tif')
 
-        # Conditional logic for WHRC
-        whrc_raster = arcpy.sa.Con(arcpy.Raster(whrc_raster) > 0, 1, 0)
+def zonal_stats(input_folder):
+    aoi_list = list_files_in_directory(input_folder, '.shp')
 
-        # Conditional logic for Mangrove
-        mangrove_raster = arcpy.sa.Con(arcpy.Raster(mangrove_raster) > 0, 1, 0)
-
-        # Add raster calculator logic...
-        output_times = arcpy.sa.Times(tcd_raster, whrc_raster)
-        output_plus = arcpy.sa.Plus(output_times, gain_raster)
-        output_plus_2 = arcpy.sa.Plus(output_plus, mangrove_raster)
-        output_raster = arcpy.sa.Con(arcpy.Raster(output_plus_2) > 0, 1, 0)
-
-        output_raster.save(mask_path_tcd)
-
-def ZonalStats(input_folder: object) -> object:
-    # Get a list of shapefiles in the input folder
-    aoi_list = [os.path.join(input_folder, f) for f in os.listdir(input_folder) if f.endswith('.shp')]
-
-    print(aoi_list)
-    # Loop through each area of interest
     for aoi in aoi_list:
-        # Extract the name of the AOI from the file path
         aoi_name = os.path.splitext(os.path.basename(aoi))[0]
-        print("Now processing " + aoi_name + ": \n")
+        print(f"Now processing {aoi_name}: \n")
 
         if "IDN" in aoi_name:
-            raster_folder = os.path.join(arcpy.env.workspace,"Input","00N_110E")
+            raster_folder = os.path.join(arcpy.env.workspace, "Input", "00N_110E")
             output_folder = os.path.join(arcpy.env.workspace, "Outputs", "00N_110E")
         else:
-            raster_folder = os.path.join(arcpy.env.workspace, "Input", "20N_20W")
-            output_folder = os.path.join(arcpy.env.workspace, "Outputs", "20N_20W")
+            raster_folder = os.path.join(arcpy.env.workspace, "Input", "20N_020W")
+            output_folder = os.path.join(arcpy.env.workspace, "Outputs", "20N_020W")
+        #TODO: Update cross-reference of tiles and gadm countries to process (dictionary) (MASK_PATHS = {"IDN": "00N_110E", "GMB": "20N_20W"})
 
-        # Get a list of rasters in the raster folder
-        raster_list = [os.path.join(raster_folder, f) for f in os.listdir(raster_folder) if f.endswith('.tif')]
+        process_zonal_statistics(aoi, raster_folder, output_folder)
 
-        # Loop through each raster and calculate zonal statistics as table
-        for raster in raster_list:
-            # Extract the name of the raster from the file path
-            raster_name = os.path.splitext(os.path.basename(raster))[0]
-            print('Calculating zonal statistics for ' + raster_name + ": \n")
+def process_zonal_statistics(aoi, raster_folder, output_folder):
+    raster_list = list_files_in_directory(raster_folder, '.tif')
 
-            # Create a name for the output table by concatenating the AOI name and raster name
-            output_name = "{}_{}.dbf".format(aoi_name, raster_name)
-            output_path = os.path.join(output_folder, output_name)
+    for raster in raster_list:
+        raster_name = os.path.splitext(os.path.basename(raster))[0]
+        print(f'Calculating zonal statistics for {raster_name}: \n')
 
-            # Calculate zonal statistics as table for the current raster and AOI
-            arcpy.gp.ZonalStatisticsAsTable_sa(aoi, "GID_0", raster, output_path, "DATA", "SUM")
+        output_name = f"{os.path.splitext(os.path.basename(aoi))[0]}_{raster_name}.dbf"
+        output_path = os.path.join(output_folder, output_name)
 
-            # convert each output to csv
-            csv_file = "{}_{}.csv".format(aoi_name, raster_name)
-            arcpy.TableToTable_conversion(output_path, output_folder, csv_file)
+        arcpy.gp.ZonalStatisticsAsTable_sa(aoi, "GID_0", raster, output_path, "DATA", "SUM")
+        csv_file = f"{os.path.splitext(os.path.basename(aoi))[0]}_{raster_name}.csv"
+        arcpy.TableToTable_conversion(output_path, output_folder, csv_file)
 
-def ZonalStatsMasked(input_folder: str) -> object:
-    """
+def list_files_in_directory(directory, file_extension):
+    return [os.path.join(directory, f) for f in os.listdir(directory) if f.endswith(file_extension)]
 
-    :rtype: object
-    """
-    input_folder = os.path.join(arcpy.env.workspace, "AOIS")
-    #TODO: ADD INPUT FOLDER AS AN ARGUMENT RATHER THAN HARD CODING IT HERE
+def zonal_stats_masked(aois_folder, input_folder, outputs_folder, mask_outputs_folder):
+    aoi_list = list_files_in_directory(aois_folder, '.shp')
 
-    # Get a list of shapefiles in the input folder
-    aoi_list = [os.path.join(input_folder, f) for f in os.listdir(input_folder) if f.endswith('.shp')]
-    print(aoi_list)
-
-    # Loop through each area of interest
     for aoi in aoi_list:
-        # Extract the name of the AOI from the file path
         aoi_name = os.path.splitext(os.path.basename(aoi))[0]
-        print("Now processing " + aoi_name + ": \n")
+        print(f"Now processing {aoi_name}: \n")
 
         if "IDN" in aoi_name:
-            raster_folder = os.path.join(arcpy.env.workspace,"Input","00N_110E")
-            output_folder = os.path.join(arcpy.env.workspace, "Outputs", "00N_110E")
-            mask_tiles = os.path.join(arcpy.env.workspace, "Mask","Mask","00N_110E")
+            raster_folder = os.path.join(input_folder, "00N_110E")
+            output_folder = os.path.join(outputs_folder, "00N_110E")
+            mask_tiles = os.path.join(mask_outputs_folder, "00N_110E")
         else:
-            raster_folder = os.path.join(arcpy.env.workspace, "Input", "20N_20W")
-            output_folder = os.path.join(arcpy.env.workspace, "Outputs", "20N_20W")
-            mask_tiles = os.path.join(arcpy.env.workspace, "Mask", "Mask","20N_20W")
+            raster_folder = os.path.join(input_folder, "20N_020W")
+            output_folder = os.path.join(outputs_folder, "20N_020W")
+            mask_tiles = os.path.join(mask_outputs_folder, "20N_020W")
+        # TODO: Update cross-reference of tiles and gadm countries to process (dictionary) (MASK_PATHS = {"IDN": "00N_110E", "GMB": "20N_20W"})
 
-        # Get a list of rasters in the raster folder
-        raster_list = [os.path.join(raster_folder, f) for f in os.listdir(raster_folder) if f.endswith('.tif')]
+        raster_list = list_files_in_directory(raster_folder, '.tif')
+        mask_list = list_files_in_directory(mask_tiles, '.tif')
 
-        # Loop through each raster and calculate zonal statistics as table
         for raster in raster_list:
-            # Extract the name of the raster from the file path
-            raster_name = os.path.splitext(os.path.basename(raster))[0]
-            #tile_id = str(raster_name.split("_", 1)[0]) + "_" + str(raster_name.split("_", 2)[1])
+            raster_obj = arcpy.Raster(raster)
+            print(f'Calculating zonal statistics for {raster}')
 
-            print('Calculating zonal statistics for ' + raster_name + ": \n")
-
-            mask_list = [os.path.join(mask_tiles, f) for f in os.listdir(mask_tiles) if f.endswith('.tif')]
             for mask in mask_list:
-                mask_path = os.path.splitext(os.path.basename(mask))[0]
-                mask_name = mask_path.split("_", 2)[2]
+                mask_obj = arcpy.Raster(mask)
 
-                # # Create a name for the output table by concatenating the AOI name and raster name
-                output_name = "{}_{}.dbf".format(aoi_name, str(raster_name) + "_" + str(mask_name))
-                output_path = os.path.join(output_folder, output_name)
+                # Check if spatial references and extents are the same
+                if (raster_obj.extent == mask_obj.extent and raster_obj.spatialReference.name == mask_obj.spatialReference.name):
+                    raster_name = os.path.splitext(os.path.basename(raster))[0]
 
-                masked_raster = arcpy.sa.Times(raster, mask)
-                arcpy.gp.ZonalStatisticsAsTable_sa(aoi, "GID_0", masked_raster, output_path, "DATA", "SUM")
+                    mask_path = os.path.splitext(os.path.basename(mask))[0]
+                    mask_name = mask_path.split("_", 2)[2]
 
-                # convert each output to csv
-                csv_file = "{}_{}.csv".format(aoi_name, str(raster_name) + "_" + str(mask_name))
-                arcpy.TableToTable_conversion(output_path, output_folder, csv_file)
+                    # Create a name for the output table by concatenating the AOI name and raster name
+                    output_name = "{}_{}.dbf".format(aoi_name, str(raster_name) + "_" + str(mask_name))
+                    output_path = os.path.join(output_folder, output_name)
 
-def ZonalStatsAnnualized(input_folder):
-    # Get a list of shapefiles in the input folder
-    input_folder = os.path.join(arcpy.env.workspace, "TCL")
-    # TODO: ADD INPUT FOLDER AS AN ARGUMENT RATHER THAN HARD CODING IT HERE
-    aoi_list = [os.path.join(input_folder, f) for f in os.listdir(input_folder) if f.endswith('clip.tif')]
+                    masked_raster = arcpy.sa.Times(raster_obj, mask_obj)
+                    arcpy.gp.ZonalStatisticsAsTable_sa(aoi, "GID_0", masked_raster, output_path, "DATA", "SUM")
+                    print(f'Masking {raster} by {mask}')
 
-    print(aoi_list)
+                    # Convert each output to csv
+                    csv_file = "{}_{}.csv".format(aoi_name, str(raster_name) + "_" + str(mask_name))
+                    arcpy.TableToTable_conversion(output_path, output_folder, csv_file)
+                    print(f'{output_path} successfully finished')
 
-    # Loop through each area of interest
+                else:
+                    print(f"Spatial references or extents do not match for {raster} and {mask}")
+
+def zonal_stats_annualized(tcl_folder, input_folder, annual_folder):
+    aoi_list = list_files_in_directory(tcl_folder, 'clip.tif')
+
     for aoi in aoi_list:
-        # Extract the name of the AOI from the file path
         aoi_name = os.path.splitext(os.path.basename(aoi))[0]
-        print("Now processing " + aoi_name + ": \n")
+        print(f"Now processing {aoi_name}: \n")
 
         if "IDN" in aoi_name:
-            raster_folder = os.path.join(arcpy.env.workspace,"Input","00N_110E")
-            output_folder = os.path.join(arcpy.env.workspace, "Outputs", "Annual")
+            raster_folder = os.path.join(input_folder, "00N_110E")
+            output_folder = annual_folder
         else:
-            raster_folder = os.path.join(arcpy.env.workspace, "Input", "20N_20W")
-            output_folder = os.path.join(arcpy.env.workspace, "Outputs","Annual")
+            raster_folder = os.path.join(input_folder, "20N_020W")
+            output_folder = annual_folder
+            # TODO: Update cross-reference of tiles and gadm countries to process (dictionary) (MASK_PATHS = {"IDN": "00N_110E", "GMB": "20N_20W"})
 
-        # Get a list of rasters in the raster folder
-        raster_list = [os.path.join(raster_folder, f) for f in os.listdir(raster_folder) if "emis" in f and f.endswith('tif')]
+        process_annual_zonal_stats(aoi, raster_folder, output_folder)
 
-        # Loop through each raster and calculate zonal statistics as table
-        for raster in raster_list:
-            # Extract the name of the raster from the file path
-            raster_name = os.path.splitext(os.path.basename(raster))[0]
-            print('Calculating zonal statistics for ' + raster_name + ": \n")
+def process_annual_zonal_stats(aoi, raster_folder, output_folder):
+    raster_list = [os.path.join(raster_folder, f) for f in os.listdir(raster_folder) if "emis" in f and f.endswith('tif')]
+    print(raster_list)
 
-            # Create a name for the output table by concatenating the AOI name and raster name
-            output_name = "{}_{}.dbf".format(aoi_name, raster_name)
-            output_path = os.path.join(output_folder, output_name)
+    for raster in raster_list:
+        raster_name = os.path.splitext(os.path.basename(raster))[0]
+        print(f'Calculating zonal statistics for {raster_name}: \n')
 
-            # Calculate zonal statistics as table for the current raster and AOI
-            arcpy.gp.ZonalStatisticsAsTable_sa(aoi, "Value", raster, output_path, "DATA", "SUM")
+        output_name = f"{os.path.splitext(os.path.basename(aoi))[0]}_{raster_name}.dbf"
+        output_path = os.path.join(output_folder, output_name)
 
-            # convert each output to csv
-            csv_file = "{}_{}.csv".format(aoi_name, raster_name)
-            arcpy.TableToTable_conversion(output_path, output_folder, csv_file)
+        arcpy.gp.ZonalStatisticsAsTable_sa(aoi, "Value", raster, output_path, "DATA", "SUM")
+        csv_file = f"{os.path.splitext(os.path.basename(aoi))[0]}_{raster_name}.csv"
+        arcpy.TableToTable_conversion(output_path, output_folder, csv_file)
 
-def ZonalStatsClean(input_folder) -> object:
+def ZonalStatsClean(input_folders, csv_folder) -> object:
     # Initialize an empty data frame to store the data
+    df = pd.DataFrame()
+    for folder in input_folders:
+        # Loop through the files in each folder
+        for file in os.listdir(folder):
+            if file.endswith(".csv"):
+                # Load the csv file into a pandas data frame
+                csv_df = pd.read_csv(os.path.join(folder, file))
 
+                # Rename the "sum" field to the name of the file
+                csv_df["Name"] = file
 
-    folder1 = os.path.join(arcpy.env.workspace,"Outputs","00N_110E")
-    folder2 = os.path.join(arcpy.env.workspace,"Outputs","20N_20W")
-    folder3 = os.path.join(arcpy.env.workspace,"Outputs","Annual")
+                #Define type of calc
+                if "emis" in file:
+                    type = "gross emissions"
+                elif "removals" in file:
+                    type = "gross removals"
+                else:
+                    type = "net flux"
+                csv_df["Type"] = type
 
+                #Define extent of calc
+                if "forest_extent" in file:
+                    extent = "forest extent"
+                else:
+                    extent = "full extent"
+                csv_df["Extent"] = extent
+
+                #Define tcd threshold
+                tcd = re.match(r'.*tcd([0-9]+).*', file)
+                if tcd is not None:
+                    csv_df["Density"] = tcd.group(1)
+                else:
+                    csv_df["Density"] = 'NA'
+
+                # Define mask of calc
+                if "plantation." in file:
+                    mask = "gain, tcd, biomass, mangrove, plantation"
+                elif "mangrove." in file:
+                    mask = "gain, tcd, biomass, mangrove"
+                elif "gain." in file:
+                    mask = "gain"
+                else:
+                    mask = "no mask"
+                csv_df["Mask"] = mask
+
+                # Drop all other fields
+                assert isinstance(csv_df, object)
+                csv_df.drop([ 'OID_', 'COUNT', 'AREA'], axis=1, inplace=True)
+
+                # Append the data to the main data frame
+                df = pd.concat([df, csv_df], axis=0)
+
+        # Print the resulting data frame to check the data
+        print(df)
+
+        # define the output location
+        output_path = os.path.join(csv_folder,"final_output.csv")
+
+        # Export the data frame as a CSV file
+        df.to_csv(output_path, index=False)
+
+    #TODO: Export dataframe for annualized results
+def zonal_stats_clean(input_folders, csv_folder):
     df = pd.DataFrame()
 
-    # Loop through the files in folder1
-    for file in os.listdir(folder1):
-        if file.endswith(".csv"):
-            # Load the csv file into a pandas data frame
-            csv_df = pd.read_csv(os.path.join(folder1, file))
+    for folder in input_folders:
+        for file in os.listdir(folder):
+            if file.endswith(".csv"):
+                file_path = os.path.join(folder, file)
+                csv_df = load_and_process_csv(file_path, file)
+                df = pd.concat([df, csv_df], axis=0)
 
-            # Rename the "sum" field to the name of the file
-            csv_df["Name"] = file
-
-
-            #Define type of calc
-            if "emis" in file:
-                type = "gross emissions"
-            elif "removals" in file:
-                type = "gross removals"
-            else:
-                type = "net flux"
-            csv_df["Type"] = type
-
-            #Define extent of calc
-            if "forest_extent" in file:
-                extent = "forest extent"
-            else:
-                extent = "full extent"
-            csv_df["Extent"] = extent
-
-            # Define mask of calc
-            if "tcd_gain" in file:
-                mask = "tcd and gain"
-            elif "_tcd." in file:
-                mask = "tcd"
-            else:
-                mask = "no mask"
-            csv_df["Mask"] = mask
-
-            # Drop all other fields
-            assert isinstance(csv_df, object)
-            csv_df.drop([ 'OID_', 'COUNT', 'AREA'], axis=1, inplace=True)
-
-            # Append the data to the main data frame
-            df = pd.concat([df, csv_df], axis=0)
-
-    # Loop through the files in folder2
-    for file in os.listdir(folder2):
-        if file.endswith(".csv"):
-            # Load the csv file into a pandas data frame
-            csv_df = pd.read_csv(os.path.join(folder2, file))
-
-            # Rename the "sum" field to the name of the file
-            csv_df["Name"] = file
-            #Define type of calc
-            if "emis" in file:
-                type = "gross emissions"
-            elif "removals" in file:
-                type = "gross removals"
-            else:
-                type = "net flux"
-            csv_df["Type"] = type
-
-            #Define extent of calc
-            if "forest" in file:
-                extent = "forest extent"
-            else:
-                extent = "full extent"
-            csv_df["Extent"] = extent
-
-            # Define mask of calc
-            if "tcd_gain" in file:
-                mask = "tcd and gain"
-            elif "_tcd." in file:
-                mask = "tcd"
-            else:
-                mask = "no mask"
-            csv_df["Mask"] = mask
-
-            # Drop all other fields
-            assert isinstance(csv_df, object)
-            csv_df.drop([ 'OID_', 'COUNT', 'AREA'], axis=1, inplace=True)
-
-            # Append the data to the main data frame
-            df = pd.concat([df, csv_df], axis=0)
-
-    # Print the resulting data frame to check the data
     print(df)
 
-    # define the output location
-    output_path = os.path.join(arcpy.env.workspace, "Outputs", "CSV","output.csv")
-
-    # Export the data frame as a CSV file
+    output_path = os.path.join(csv_folder, "output.csv")
     df.to_csv(output_path, index=False)
 
-#TODO: Export dataframe for annualized results
+def load_and_process_csv(file_path, file_name):
+    csv_df = pd.read_csv(file_path)
 
 # Downloads individual tiles from s3
     # source = source file on s3

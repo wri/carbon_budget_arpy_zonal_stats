@@ -1,15 +1,14 @@
-"""
-This section of code is for organizing the outputs into one csv for clarity. It uses pandas to loop through the dbf
-outputs and write the sum fields to a new dataframe, then export this dataframe to a csv. Comment out if not necessary
-"""
 import os
-import pandas as pd
-import arcpy
-from funcs_new import ZonalStatsClean
+import constants_and_names as cn
+from funcs import zonal_stats_clean, ZonalStatsClean
 
-#TODO: Change workspace using working_directory
+#TODO: Export dataframe for annualized results
 
-arcpy.env.workspace = r"C:\GIS\carbon_model\CarbonFlux_QA_2023"
-arcpy.env.overwriteOutput = True
+#Set the input folders and output csv folder
+input_folders = []
+for tile in cn.tile_list:
+    input_folders.append(os.path.join(cn.outputs_folder, tile))
+#input_folders.append(cn.annual_folder)
 
-ZonalStatsClean(arcpy.env.workspace)
+#zonal_stats_clean(input_folders, cn.csv_folder)
+ZonalStatsClean(input_folders, cn.csv_folder)
