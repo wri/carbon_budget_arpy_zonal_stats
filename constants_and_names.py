@@ -20,11 +20,14 @@ loss_years = 22
 model_run_date = '20230407'
 
 # List of tile_ids to process (change according to which tiles overlap with your AOIS shapefiles)
-tile_list = ['20N_020W','00N_110E']
+tile_list = ['00N_110E', '20N_020W']
 
 #List of tree cover density thresholds to mask by
-tcd_threshold = [30, 75]
+#tcd_threshold = [0, 30, 75]
 gain = True
+
+# Flag to save intermediate masks
+#save_intermediates = False
 
 #####################################################################################
 
