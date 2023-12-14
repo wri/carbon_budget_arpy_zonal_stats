@@ -6,7 +6,7 @@ import re
 from subprocess import Popen, PIPE, STDOUT
 import constants_and_names as cn
 
-def DownloadFiles():
+def download_files():
     # Step 1: Checking to see if the AOIS folder exists and if it contains a shapefile
     print("Step 0.1: Checking to see if AOIS folder exists and contains a shapefile")
     if os.path.isdir(cn.aois_folder):
@@ -46,7 +46,8 @@ def DownloadFiles():
     # Step 5: Create TCL folder structure
     print("Step 0.5: Creating TCL folder structure")
     folder_check(cn.tcl_folder)
-    # TODO: Where are these clipped rasters coming from?
+
+    #TODO: Download GADM shapefiles to AOIS folder?
 
     # Step 6: Download emission/removal/netflux tiles (6 per tile) to Input folder
     print("Step 0.6: Downloading files for Input folder")
@@ -71,9 +72,10 @@ def DownloadFiles():
     s3_flexible_download(cn.tile_list, cn.tcd_s3_path, cn.tcd_s3_pattern, cn.tcd_folder)
     s3_flexible_download(cn.tile_list, cn.whrc_s3_path, cn.whrc_s3_pattern, cn.whrc_folder)
 
-    #TODO: Step 8: Download TCL folder tiles
+    #TODO: Step 8: Download TCL folder tiles and clip to GADM boundary
 
-def create_masks(tcd_tiles, gain_tiles, whrc_tiles, mangrove_tiles, plantation_tiles, tcd_threshold, gain):
+
+def create_masks(tcd_tiles, gain_tiles, whrc_tiles, mangrove_tiles, plantation_tiles, tcd_threshold, gain, save_intermediates):
     # Get a list of rasters in the raster folder
     tcd_list = [os.path.join(tcd_tiles, f) for f in os.listdir(tcd_tiles) if f.endswith('.tif')]
 
@@ -82,12 +84,12 @@ def create_masks(tcd_tiles, gain_tiles, whrc_tiles, mangrove_tiles, plantation_t
         tile_id = get_tile_id(raster_name)
         mask_tiles = os.path.join(cn.mask_output_folder, tile_id)
 
-        process_raster(raster, gain_tiles, whrc_tiles, mangrove_tiles, plantation_tiles, mask_tiles, tcd_threshold, gain)
+        process_raster(raster, gain_tiles, whrc_tiles, mangrove_tiles, plantation_tiles, mask_tiles, tcd_threshold, gain, save_intermediates)
 
 def get_tile_id(raster_name):
     return raster_name.split("_", 3)[3]
 
-def process_raster(raster, gain_tiles, whrc_tiles, mangrove_tiles, plantation_tiles, mask_tiles, tcd_threshold, gain):
+def process_raster(raster, gain_tiles, whrc_tiles, mangrove_tiles, plantation_tiles, mask_tiles, tcd_threshold, gain, save_intermediates):
     tile_id = get_tile_id(os.path.splitext(os.path.basename(raster))[0])
 
     #Paths to Mask, Input files
@@ -99,55 +101,103 @@ def process_raster(raster, gain_tiles, whrc_tiles, mangrove_tiles, plantation_ti
     print(f'Creating masks for {tile_id}: \n')
 
     for tcd_val in tcd_threshold:
+        #Read in the plantation raster and mask before saving each intermediate
+        if os.path.exists(plantation_raster_path):
+            plantation_raster = arcpy.sa.IsNull(arcpy.Raster(plantation_raster_path))
+
         # Conditional logic for where TCD AND biomass
-        tcd_raster = arcpy.sa.Con(arcpy.Raster(raster) > tcd_val, 1, 0) #TODO: Should this be greater than or equal to threshold?
+        tcd_raster = arcpy.sa.Con(arcpy.Raster(raster) > tcd_val, 1, 0)
         whrc_raster = arcpy.sa.Con(arcpy.Raster(whrc_raster_path) > 0, 1, 0)
         tcd_whrc_raster = arcpy.sa.Times(tcd_raster, whrc_raster)
         tcd_whrc_mask = arcpy.sa.Con(arcpy.Raster(tcd_whrc_raster) > 0, 1, 0)
 
-        #Saving tcd_whrc mask
         mask_path_tcd = os.path.join(mask_tiles, f'{tile_id}_tcd{tcd_val}')
-        print(f'Saving {mask_path_tcd}.tif')
-        tcd_whrc_mask.save(f'{mask_path_tcd}.tif')
 
-        # Conditional logic for TCD OR gain
+        if save_intermediates == True:
+            # Conditional logic for TCD AND biomass NOT Pre-2000 Plantation
+            if os.path.exists(plantation_raster_path):
+                tcd_noplantation_raster = arcpy.sa.Times(tcd_whrc_mask, plantation_raster)
+                tcd_noplantation_mask = arcpy.sa.Con(arcpy.Raster(tcd_noplantation_raster) > 0, 1, 0)
+
+                # Saving the tcd_noplantation mask
+                mask_path_tcd_noplantation = f'{mask_path_tcd}_notPlantation'
+                print(f'Saving {mask_path_tcd_noplantation}.tif')
+                tcd_noplantation_mask.save(f'{mask_path_tcd_noplantation}.tif')
+
+            else:
+                # Saving the tcd mask
+                print(f'Saving {mask_path_tcd}.tif')
+                tcd_whrc_mask.save(f'{mask_path_tcd}.tif')
+
+        #else:
+        #    mask_path_tcd_noplantation = mask_path_tcd
+        #    tcd_noplantation_mask = tcd_whrc_mask
+
         if gain == True:
+            # Conditional logic for TCD AND biomass OR gain
             gain_raster = arcpy.sa.Con(arcpy.Raster(gain_raster_path) > 0, 1, 0)
             tcd_gain_raster = arcpy.ia.Merge([tcd_whrc_mask, gain_raster], "SUM")
             tcd_gain_mask = arcpy.sa.Con(arcpy.Raster(tcd_gain_raster) > 0, 1, 0)
 
-            # Saving tcd_gain mask
             mask_path_tcd_gain = f'{mask_path_tcd}_gain'
-            print(f'Saving {mask_path_tcd_gain}.tif')
-            tcd_gain_mask.save(f'{mask_path_tcd_gain}.tif')
+
+            if save_intermediates == True:
+                # Conditional logic for TCD AND biomass OR gain NOT Pre-2000 Plantation
+                if os.path.exists(plantation_raster_path):
+                    tcd_gain_noplantation_raster = arcpy.sa.Times(tcd_gain_mask, plantation_raster)
+                    tcd_gain_noplantation_mask = arcpy.sa.Con(arcpy.Raster(tcd_gain_noplantation_raster) > 0, 1, 0)
+
+                    # Saving the tcd_gain_noplantation mask
+                    mask_path_tcd_gain_noplantation = f'{mask_path_tcd_gain}_notPlantation'
+                    print(f'Saving {mask_path_tcd_gain_noplantation}.tif')
+                    tcd_gain_noplantation_mask.save(f'{mask_path_tcd_gain_noplantation}.tif')
+
+                else:
+                    # Saving the tcd_gain mask
+                    print(f'Saving {mask_path_tcd_gain}.tif')
+                    tcd_gain_mask.save(f'{mask_path_tcd_gain}.tif')
+
         else:
             mask_path_tcd_gain = mask_path_tcd
             tcd_gain_mask = tcd_whrc_mask
 
-        # Conditional logic for TCD, gain, OR mangrove
+
         if os.path.exists(mangrove_raster_path):
+            # Conditional logic for TCD AND biomass OR gain OR mangrove NOT Pre-2000 Plantation
             mangrove_raster = arcpy.sa.Con(arcpy.Raster(mangrove_raster_path) > 0, 1, 0)
             tcd_gain_mangrove_raster = arcpy.ia.Merge([tcd_gain_mask, mangrove_raster], "SUM")
             tcd_gain_mangrove_mask = arcpy.sa.Con(arcpy.Raster(tcd_gain_mangrove_raster) > 0, 1, 0)
 
-            # Saving tcd_gain_mangrove mask
             mask_path_tcd_gain_mangrove = f'{mask_path_tcd_gain}_mangrove'
-            print(f'Saving {mask_path_tcd_gain_mangrove}.tif')
-            tcd_gain_mangrove_mask.save(f'{mask_path_tcd_gain_mangrove}.tif')
-        else:
-            mask_path_tcd_gain_mangrove = mask_path_tcd_gain
-            tcd_gain_mangrove_mask = tcd_gain_mask
+
+            # Conditional logic for TCD AND biomass OR gain OR mangrove NOT Pre-2000 Plantation
+            if os.path.exists(plantation_raster_path):
+                tcd_gain_mangrove_noplantation_raster = arcpy.sa.Times(tcd_gain_mangrove_mask, plantation_raster)
+                tcd_gain_mangrove_noplantation_mask = arcpy.sa.Con(arcpy.Raster(tcd_gain_mangrove_noplantation_raster) > 0, 1, 0)
+
+                # Saving the tcd_gain_mangrove_noplantation mask
+                mask_path_tcd_gain_mangrove_noplantation = f'{mask_path_tcd_gain_mangrove}_notPlantation'
+                print(f'Saving {mask_path_tcd_gain_mangrove_noplantation}.tif')
+                tcd_gain_mangrove_noplantation_mask.save(f'{mask_path_tcd_gain_mangrove_noplantation}.tif')
+
+            else:
+                # Saving tcd_gain_mangrove mask
+                print(f'Saving {mask_path_tcd_gain_mangrove}.tif')
+                tcd_gain_mangrove_mask.save(f'{mask_path_tcd_gain_mangrove}.tif')
+        # else:
+        #     mask_path_tcd_gain_mangrove = mask_path_tcd_gain
+        #     tcd_gain_mangrove_mask = tcd_gain_mask
 
         # Conditional logic for TCD, gain, mangrove, OR plantations
-        if os.path.exists(plantation_raster_path):
-            plantation_raster = arcpy.sa.Con(arcpy.Raster(plantation_raster_path) > 0, 1, 0)
-            tcd_gain_mangrove_plantation_raster = arcpy.ia.Merge([tcd_gain_mangrove_mask, plantation_raster], "SUM")
-            tcd_gain_mangrove_plantation_mask = arcpy.sa.Con(arcpy.Raster(tcd_gain_mangrove_plantation_raster) > 0, 1, 0)
-
-            # Saving tcd_gain_mangrove_plantation mask
-            mask_path_tcd_gain_mangrove_plantation = f'{mask_path_tcd_gain_mangrove}_plantation'
-            print(f'Saving {mask_path_tcd_gain_mangrove_plantation}.tif')
-            tcd_gain_mangrove_plantation_mask.save(f'{mask_path_tcd_gain_mangrove_plantation}.tif')
+        # if os.path.exists(plantation_raster_path):
+        #     plantation_raster = arcpy.sa.Con(arcpy.Raster(plantation_raster_path) > 0, 1, 0)
+        #     tcd_gain_mangrove_plantation_raster = arcpy.ia.Merge([tcd_gain_mangrove_mask, plantation_raster], "SUM")
+        #     tcd_gain_mangrove_plantation_mask = arcpy.sa.Con(arcpy.Raster(tcd_gain_mangrove_plantation_raster) > 0, 1, 0)
+        #
+        #     # Saving tcd_gain_mangrove_plantation mask
+        #     mask_path_tcd_gain_mangrove_plantation = f'{mask_path_tcd_gain_mangrove}_plantation'
+        #     print(f'Saving {mask_path_tcd_gain_mangrove_plantation}.tif')
+        #     tcd_gain_mangrove_plantation_mask.save(f'{mask_path_tcd_gain_mangrove_plantation}.tif')
 
 def zonal_stats(input_folder):
     aoi_list = list_files_in_directory(input_folder, '.shp')
@@ -223,12 +273,12 @@ def zonal_stats_masked(aois_folder, input_folder, outputs_folder, mask_outputs_f
 
                     masked_raster = arcpy.sa.Times(raster_obj, mask_obj)
                     arcpy.gp.ZonalStatisticsAsTable_sa(aoi, "GID_0", masked_raster, output_path, "DATA", "SUM")
-                    print(f'Masking {raster} by {mask}')
+                    print(f'    Masking with {mask}')
 
                     # Convert each output to csv
                     csv_file = "{}_{}.csv".format(aoi_name, str(raster_name) + "_" + str(mask_name))
                     arcpy.TableToTable_conversion(output_path, output_folder, csv_file)
-                    print(f'{output_path} successfully finished')
+                    print(f'    Successfully finished')
 
                 else:
                     print(f"Spatial references or extents do not match for {raster} and {mask}")
@@ -265,7 +315,7 @@ def process_annual_zonal_stats(aoi, raster_folder, output_folder):
         csv_file = f"{os.path.splitext(os.path.basename(aoi))[0]}_{raster_name}.csv"
         arcpy.TableToTable_conversion(output_path, output_folder, csv_file)
 
-def ZonalStatsClean(input_folders, csv_folder) -> object:
+def zonal_stats_clean(input_folders, csv_folder) -> object:
     # Initialize an empty data frame to store the data
     df = pd.DataFrame()
     for folder in input_folders:
@@ -302,16 +352,18 @@ def ZonalStatsClean(input_folders, csv_folder) -> object:
                     csv_df["Density"] = 'NA'
 
                 # Define mask of calc
-                if "plantation." in file:
-                    mask = "tcd, gain, mangrove, plantation"
-                elif "mangrove." in file:
+                if "mangrove" in file:
                     mask = "tcd, gain, mangrove"
-                elif "gain." in file:
+                elif "gain" in file:
                     mask = "tcd, gain"
                 elif "tcd" in file:
                     mask = "tcd"
                 else:
                     mask = "no mask"
+
+                if "notPlantation" in file:
+                    mask = f'{mask}, NOT plantation'
+
                 csv_df["Mask"] = mask
 
                 # Drop all other fields
@@ -331,20 +383,6 @@ def ZonalStatsClean(input_folders, csv_folder) -> object:
         df.to_csv(output_path, index=False)
 
     #TODO: Export dataframe for annualized results
-def zonal_stats_clean(input_folders, csv_folder):
-    df = pd.DataFrame()
-
-    for folder in input_folders:
-        for file in os.listdir(folder):
-            if file.endswith(".csv"):
-                file_path = os.path.join(folder, file)
-                csv_df = load_and_process_csv(file_path, file)
-                df = pd.concat([df, csv_df], axis=0)
-
-    print(df)
-
-    output_path = os.path.join(csv_folder, "output.csv")
-    df.to_csv(output_path, index=False)
 
 def load_and_process_csv(file_path, file_name):
     csv_df = pd.read_csv(file_path)

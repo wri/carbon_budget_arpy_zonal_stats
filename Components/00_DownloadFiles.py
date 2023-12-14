@@ -1,5 +1,3 @@
-from funcs import DownloadFiles
+from funcs import download_files
 
-#TODO: DOWNLOAD GADM BOUNDARY SHAPEFILES TO AOIS FOLDER?
-
-DownloadFiles()
+download_files()
