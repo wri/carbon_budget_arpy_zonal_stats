@@ -15,19 +15,22 @@ overwrite_arcgis_output = True
 # With each model update, change loss years and model_run_date
     # loss_years = number of years of tree cover loss (if input loss raster is changed, this must be changed, too)
     # model_run_date = s3 directory where per-pixel outputs from most recent model run are saved
-version = '1.3.1'
 loss_years = 22
 model_run_date = '20231114'
 
 # List of tile_ids to process (change according to which tiles overlap with your AOIS shapefiles)
 tile_list = ['00N_110E', '20N_020W']
 
+# Dictionary to cross-reference countries to their tile_id and GADM boundaries
+tile_dictionary = {"IDN": "00N_110E",
+                   "GMB": "20N_020W"}
+
 #List of tree cover density thresholds to mask by
-#tcd_threshold = [0, 30, 75]
+tcd_threshold = [0, 30, 75]
 gain = True
 
-# Flag to save intermediate masks
-#save_intermediates = False
+# Flag to save intermediate masks during create_masks()
+save_intermediates = False
 
 #####################################################################################
 
@@ -50,6 +53,9 @@ outputs_folder = os.path.join(arcpy.env.workspace, "Outputs")
 csv_folder = os.path.join(outputs_folder, "CSV")
 annual_folder = os.path.join(outputs_folder, "Annual")
 tcl_folder = os.path.join(arcpy.env.workspace, "TCL")
+tcl_input_folder = os.path.join(tcl_folder, "Inputs")
+tcl_clip_folder = os.path.join(tcl_folder, "Clip")
+tcl_mask_folder = os.path.join(tcl_folder, "Mask")
 
 # Filepaths for tile download step
 s3_base_dir = 's3://gfw2-data/climate/carbon_model/'
@@ -88,7 +94,6 @@ gain_local_pattern = 'tree_cover_gain_2000_2020'
 # Processed mangrove aboveground biomass in the year 2000
 mangrove_s3_path = os.path.join(s3_base_dir, 'mangrove_biomass/processed/standard/20190220/')
 mangrove_s3_pattern = 'mangrove_agb_t_ha_2000'
-#TODO: ERIN'S FILES HAVE "_REWINDOW". DOES THIS MATTER -> DO WE NEED TO ADD A REWINDOWING STEP?
 
 # Pre-2000 plantations
 plantation_s3_path = os.path.join(s3_base_dir, 'other_emissions_inputs/IDN_MYS_plantation_pre_2000/processed/20200724/')
