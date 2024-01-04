@@ -1,4 +1,3 @@
-import os
 import constants_and_names as cn
 from funcs import download_files, create_masks, zonal_stats_masked, zonal_stats_annualized, zonal_stats_clean
 
@@ -8,25 +7,16 @@ download_files()
 
 #Execute Create Masks...
 print("Step 2: Creating Masks... \n")
-create_masks(cn.tcd_folder, cn.gain_folder, cn.whrc_folder, cn.mangrove_folder, cn.plantations_folder, cn.tcd_threshold, cn.gain, cn.save_intermediates)
+create_masks(cn.tcd_threshold, cn.gain, cn.save_intermediates)
 
 #Execute Calculate Zonal Stats Masked...
 print("Step 3: Calculating Zonal Stats with Masks... \n")
-zonal_stats_masked(cn.aois_folder, cn.input_folder, cn.outputs_folder, cn.mask_output_folder)
-
-#Execute Create Masked TCL...
-print("Step 4: Masking TCL Tiles... \n")
-
+zonal_stats_masked(cn.aois_folder, cn.input_folder, cn.mask_output_folder, cn.outputs_folder)
 
 #Execute Calculcate Zonal Stats Annualized...
 print("Step 4: Calculating Zonal Stats Annualized... \n")
-zonal_stats_annualized(cn.tcl_clip_folder, cn.input_folder, cn.annual_folder)
+zonal_stats_annualized(cn.tcl_clip_folder, cn.input_folder, cn.mask_output_folder, cn.annual_folder)
 
 #Execute Zonal Stats Clean...
 print("Step 5: Cleaning Zonal Stats... \n")
-input_folders = []
-for tile in cn.tile_list:
-    input_folders.append(os.path.join(cn.outputs_folder, tile))
-zonal_stats_clean(input_folders, cn.csv_folder)
-
-#TODO: Export dataframe for annualized results
+zonal_stats_clean()

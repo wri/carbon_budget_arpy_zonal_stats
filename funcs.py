@@ -6,11 +6,6 @@ import re
 from subprocess import Popen, PIPE, STDOUT
 import constants_and_names as cn
 
-#TODO: Update process_annual_zonal_stats() so it calculates annual emissions from masked (0, 30, 75) tcl_clip rasters.
-#TODO:
-# Future Updates:
-# Add Tree cover extent 2000 (ha), AGB stock (Mg), Emissions_soil_only_all gases (Mg CO2e), and TCL 2001-22(ha) stats
-
 ########################################################################################################################
 # Functions to run modules
 ########################################################################################################################
@@ -24,7 +19,7 @@ def download_files():
     create_tile_folders(cn.tile_list, cn.input_folder)
 
     # Step 3: Create Mask folder with Inputs subfolder (gain, mangrove, pre-200 plantations, and tree cover density) and
-            # Mask subfolder (folder for each tile in tile_list)
+    # Mask subfolder (folder for each tile in tile_list)
     print("Step 1.3: Creating Mask folder structure")
     create_subfolders([cn.mask_input_folder, cn.gain_folder, cn.mangrove_folder, cn.plantations_folder, cn.tcd_folder, cn.whrc_folder])
     create_tile_folders(cn.tile_list, cn.mask_output_folder)
@@ -36,16 +31,18 @@ def download_files():
 
     # Step 5: Create TCL folder structure
     print("Step 1.5: Creating TCL folder structure")
-    create_subfolders([cn.tcl_input_folder, cn.tcl_clip_folder, cn.tcl_mask_folder])
+    create_subfolders([cn.tcl_input_folder, cn.tcl_clip_folder])
 
-    # Step 6: Download emission/removal/netflux tiles (6 per tile) to Input folder
+    # Step 6: Download emission/removal/netflux tiles (3 - 6 per tile) to Input folder
     print("Step 1.6: Downloading files for Input folder")
-    s3_flexible_download(cn.tile_list, cn.gross_emis_forest_extent_s3_path, cn.gross_emis_forest_extent_s3_pattern, cn.input_folder)
-    s3_flexible_download(cn.tile_list, cn.gross_emis_full_extent_s3_path, cn.gross_emis_full_extent_s3_pattern, cn.input_folder)
-    s3_flexible_download(cn.tile_list, cn.gross_removals_forest_extent_s3_path, cn.gross_removals_forest_extent_s3_pattern, cn.input_folder)
-    s3_flexible_download(cn.tile_list, cn.gross_removals_full_extent_s3_path, cn.gross_removals_full_extent_s3_pattern, cn.input_folder)
-    s3_flexible_download(cn.tile_list, cn.netflux_forest_extent_s3_path, cn.netflux_forest_extent_s3_pattern, cn.input_folder)
-    s3_flexible_download(cn.tile_list, cn.netflux_full_extent_s3_path, cn.netflux_full_extent_s3_pattern, cn.input_folder)
+    if cn.extent == 'full' or cn.extent == 'both':
+        s3_flexible_download(cn.tile_list, cn.gross_emis_full_extent_s3_path, cn.gross_emis_full_extent_s3_pattern, cn.input_folder)
+        s3_flexible_download(cn.tile_list, cn.gross_removals_full_extent_s3_path, cn.gross_removals_full_extent_s3_pattern, cn.input_folder)
+        s3_flexible_download(cn.tile_list, cn.netflux_full_extent_s3_path, cn.netflux_full_extent_s3_pattern, cn.input_folder)
+    if cn.extent == 'forest' or cn.extent == 'both':
+        s3_flexible_download(cn.tile_list, cn.gross_emis_forest_extent_s3_path, cn.gross_emis_forest_extent_s3_pattern, cn.input_folder)
+        s3_flexible_download(cn.tile_list, cn.gross_removals_forest_extent_s3_path, cn.gross_removals_forest_extent_s3_pattern, cn.input_folder)
+        s3_flexible_download(cn.tile_list, cn.netflux_forest_extent_s3_path, cn.netflux_forest_extent_s3_pattern, cn.input_folder)
 
     # Step 7: Download Gain, Mangrove, Pre_2000_Plantations, TCD, and WHRC subfolders for each tile to Mask, Inputs subfolders
     print("Step 1.7: Downloading files for Mask/Inputs folder")
@@ -59,164 +56,90 @@ def download_files():
     print("Step 1.8: Downloading files for TCL/Inputs folder")
     s3_flexible_download(cn.tile_list, cn.loss_s3_path, cn.loss_s3_pattern, cn.tcl_input_folder)
 
-def create_masks(tcd_tiles, gain_tiles, whrc_tiles, mangrove_tiles, plantation_tiles, tcd_threshold, gain, save_intermediates):
+def create_masks(tcd_threshold, gain, save_intermediates):
     # Get a list of tcd tiles in the tcd folder
-    tcd_list = pathjoin_files_in_directory(tcd_tiles, '.tif')
-
+    tcd_list = pathjoin_files_in_directory(cn.tcd_folder, '.tif')
     for tcd in tcd_list:
-        raster_name = get_raster_name(tcd)
-        tile_id = get_tile_id(raster_name)
+        tile_id = get_tile_id(get_raster_name(tcd))
         mask_tiles = os.path.join(cn.mask_output_folder, tile_id)
+        process_raster(tile_id, tcd, mask_tiles, tcd_threshold, gain, save_intermediates)
 
-        process_raster(tile_id, tcd, gain_tiles, whrc_tiles, mangrove_tiles, plantation_tiles, mask_tiles, tcd_threshold, gain, save_intermediates)
-
-def zonal_stats_masked(aois_folder, input_folder, outputs_folder, mask_outputs_folder):
+def zonal_stats_masked(aois_folder, input_folder, mask_outputs_folder, outputs_folder):
     aoi_list = pathjoin_files_in_directory(aois_folder, '.shp')
-
     for aoi in aoi_list:
         aoi_name = get_raster_name(aoi)
-        print(f"Now processing {aoi_name}: \n")
-
-        country = get_country_id(aoi_name)
-        tile_id = get_tile_id_from_country(country)
-
+        print(f"Now processing {aoi_name}:")
+        tile_id = get_tile_id_from_country(get_country_id(aoi_name))
         raster_folder = os.path.join(input_folder, tile_id)
+        raster_list = pathjoin_files_in_directory(raster_folder, '.tif')
         mask_tiles = os.path.join(mask_outputs_folder, tile_id)
+        mask_list = pathjoin_files_in_directory(mask_tiles, '.tif')
         output_folder = os.path.join(outputs_folder, tile_id)
+        process_zonal_statistics(aoi, aoi_name, raster_list, mask_list, output_folder, "GID_0")
 
-        process_zonal_statistics(aoi, aoi_name, raster_folder, mask_tiles, output_folder)
-
-def tcl_masked(tcl_clip_folder, mask_outputs_folder, tcl_mask_folder):
-    print("Clipping TCL tiles to GADM boundaries")
-    clip_tcl_to_gadm(cn.tcl_input_folder, cn.tcl_clip_folder)
-
+def zonal_stats_annualized(tcl_clip_folder, input_folder, mask_outputs_folder, annual_folder):
     tcl_list = pathjoin_files_in_directory(tcl_clip_folder, '.tif')
+    if len(tcl_list) < 1:
+        print("Clipping TCL tiles to GADM boundaries")
+        clip_tcl_to_gadm(cn.tcl_input_folder, cn.tcl_clip_folder)
+        tcl_list = pathjoin_files_in_directory(tcl_clip_folder, '.tif')
+    else:
+        print(f"Found {len(tcl_list)} clipped TCL rasters.")
 
     for tcl in tcl_list:
         tcl_name = get_raster_name(tcl)
-        tcl_obj = arcpy.Raster(tcl)
+        tcl_raster = arcpy.Raster(tcl)
+        tcl_raster = arcpy.sa.SetNull(tcl_raster == 0, tcl_raster)
         print(f"Now processing {tcl_name}.tif:")
-
         tile_id = get_tile_id(tcl)
-        mask_folder = os.path.join(mask_outputs_folder, tile_id)
-        mask_list = pathjoin_files_in_directory(mask_folder, '.tif')
+        raster_folder = os.path.join(input_folder, tile_id)
+        raster_list = [os.path.join(raster_folder, f) for f in os.listdir(raster_folder) if "emis" in f and f.endswith('tif')]
+        mask_tiles = os.path.join(mask_outputs_folder, tile_id)
+        mask_list = pathjoin_files_in_directory(mask_tiles, '.tif')
+        process_zonal_statistics(tcl_raster, tcl_name, raster_list, mask_list, annual_folder, "Value")
 
-        for mask in mask_list:
-            mask_path = get_raster_name(mask)
-            mask_name = mask_path.split("_", 2)[2]
-            mask_obj = arcpy.Raster(mask)
-            print(f'    Masking {tcl_name}.tif with mask: {mask_name}')
-
-            # Check if spatial references and extents are the same
-            if (tcl_obj.spatialReference.name == mask_obj.spatialReference.name):
-                output_name = f'{tcl_name}_{mask_name}.tif'
-                output_path = os.path.join(tcl_mask_folder, output_name)
-
-                no_data_value = arcpy.Raster(mask_obj)
-                mask_nodata = arcpy.sa.Mask(mask_obj, no_data_values=[no_data_value, 0])
-
-                masked_raster = arcpy.sa.ExtractByMask(tcl_obj, mask_nodata, "INSIDE")
-                masked_raster.save(output_path)
-                print(f'    Successfully finished')
-
-            else:
-                print(f"    Spatial references do not match for {tcl_name}.tif and {mask_path}.tif")
-
-def zonal_stats_annualized(tcl_folder, input_folder, annual_folder):
-    tcl_list = pathjoin_files_in_directory(tcl_folder, '.tif')
-
-    for tcl in tcl_list:
-        tile_id = get_tile_id(tcl)
-        tile_folder = os.path.join(input_folder, tile_id)
-
-        tcl_name = get_raster_name(tcl)
-        print(f"Now processing {tcl_name}:")
-
-        process_annual_zonal_stats(tcl, tile_folder, annual_folder)
-
-def process_annual_zonal_stats(tcl, raster_folder, output_folder):
-    raster_list = [os.path.join(raster_folder, f) for f in os.listdir(raster_folder) if "emis" in f and f.endswith('tif')]
-
-    for raster in raster_list:
-        tcl_name = get_raster_name(tcl)
-        raster_name = get_raster_name(raster)
-        print(f'    Calculating zonal statistics for {raster_name}:')
-
-        output_name = f"{tcl_name}_{raster_name}.dbf"
-        output_path = os.path.join(output_folder, output_name)
-
-        arcpy.gp.ZonalStatisticsAsTable_sa(tcl, "Value", raster, output_path, "DATA", "SUM")
-        csv_file = f"{tcl_name}_{raster_name}.csv"
-        arcpy.TableToTable_conversion(output_path, output_folder, csv_file)
-
-def zonal_stats_clean(input_folders, csv_folder) -> object:
+def zonal_stats_clean():
     # Initialize an empty data frame to store the data
     df = pd.DataFrame()
-    for folder in input_folders:
-        # Loop through the files in each folder
-        for file in os.listdir(folder):
-            if file.endswith(".csv"):
-                # Load the csv file into a pandas data frame
-                csv_df = pd.read_csv(os.path.join(folder, file))
 
-                # Rename the "sum" field to the name of the file
-                csv_df["Name"] = file
+    # Create a list of all masked zonal stats output folders (one for each tile_id)
+    masked_input_folders = []
+    for tile in cn.tile_list:
+        masked_input_folders.append(os.path.join(cn.outputs_folder, tile))
 
-                #Define type of calc
-                if "emis" in file:
-                    type = "gross emissions"
-                elif "removals" in file:
-                    type = "gross removals"
-                else:
-                    type = "net flux"
-                csv_df["Type"] = type
+    # Combine masked zonal stats output csvs
+    masked_output = clean_zonal_stats_csv(masked_input_folders, df)
 
-                #Define extent of calc
-                if "forest_extent" in file:
-                    extent = "forest extent"
-                else:
-                    extent = "full extent"
-                csv_df["Extent"] = extent
+    # Clean masked output dataframe
+    masked_output.drop(['ZONE_CODE'], axis=1, inplace=True)
+    masked_output.rename(columns={"GID_0": "Country", "SUM": "Sum"}, inplace = True)
 
-                #Define tcd threshold
-                tcd = re.match(r'.*tcd([0-9]+).*', file)
-                if tcd is not None:
-                    csv_df["Density"] = tcd.group(1)
-                else:
-                    csv_df["Density"] = 'NA'
+    # Create a list of all annual zonal stats output folders
+    annual_input_folders = [cn.annual_folder]
 
-                # Define mask of calc
-                if "mangrove" in file:
-                    mask = "tcd, gain, mangrove"
-                elif "gain" in file:
-                    mask = "tcd, gain"
-                elif "tcd" in file:
-                    mask = "tcd"
-                else:
-                    mask = "no mask"
+    # Combine annual zonal stats outputs csvs
+    annual_output = clean_zonal_stats_csv(annual_input_folders, df)
+    annual_output.reset_index(inplace=True)
 
-                if "notPlantation" in file:
-                    mask = f'{mask}, NOT plantation'
+    # Clean and pivot annual output stats
+    annual_output["VALUE"] = annual_output["VALUE"] + 2000
+    annual_output = annual_output.pivot(columns="VALUE", values="SUM", index="File")
+    annual_output.reset_index(inplace=True)
 
-                csv_df["Mask"] = mask
+    # Join annual output zonal stats to masked zonal stats
+    annual_output["File"] = annual_output["File"].apply(lambda x: x.removeprefix("TCL_annualized_"))
+    final_output = masked_output.set_index('File').join(annual_output.set_index('File'), on = "File")
+    final_output.reset_index(inplace=True)
 
-                # Drop all other fields
-                assert isinstance(csv_df, object)
-                csv_df.drop([ 'OID_', 'COUNT', 'AREA'], axis=1, inplace=True)
+    # Make sure emission sums match
+    final_output["Annual_Sum"] =final_output.loc[:,2001:].sum(axis=1, min_count=1)
+    final_output["Match"] = final_output["Sum"].round() == final_output["Annual_Sum"].round()
 
-                # Append the data to the main data frame
-                df = pd.concat([df, csv_df], axis=0)
+    # Define the output location
+    output_path = os.path.join(cn.csv_folder, "final_output.csv")
 
-        # Print the resulting data frame to check the data
-        print(df)
-
-        # define the output location
-        output_path = os.path.join(csv_folder,"final_output.csv")
-
-        # Export the data frame as a CSV file
-        df.to_csv(output_path, index=False)
-
-    #TODO: Export dataframe for annualized results
+    # Export the data frame as a CSV file
+    final_output.to_csv(output_path, index=False)
 
 #######################################################################################################################
 # Utility functions
@@ -289,8 +212,9 @@ def get_gadm_boundary(country):
 def clip_to_gadm(country, input_raster, output_raster):
     clip_feature = get_gadm_boundary(country)
     no_data_value = arcpy.Raster(input_raster).noDataValue
-    arcpy.management.Clip(input_raster, "#", output_raster, clip_feature, no_data_value, "ClippingGeometry")#, "MAINTAIN_EXTENT")
     print(f'    Saving {output_raster}')
+    clipped_raster = arcpy.management.Clip(input_raster, "#", output_raster, clip_feature, no_data_value, "ClippingGeometry", "MAINTAIN_EXTENT")
+    print(f'    Successfully finished')
 
 def clip_tcl_to_gadm(input_folder, output_folder):
     print(f'    Option 1: Checking if clipped TCL tiles already exist...')
@@ -307,15 +231,16 @@ def clip_tcl_to_gadm(input_folder, output_folder):
             if os.path.exists(output_raster):
                 print(f"    Option 1 success: Tile {output_raster} already exists.")
             else:
-                print(f' Option 1 failure: Tile {output_raster} does not already exists."')
-                print(f' Option 2: Clipping TCL tile to GADM boundary')
+                print(f'    Option 1 failure: Tile {output_raster} does not already exists."')
+                print(f'    Option 2: Clipping TCL tile to GADM boundary')
                 clip_to_gadm(country, input_raster, output_raster)
+
                 if os.path.exists(output_raster):
-                    print(f'  Option 2 success: Tile {output_raster} successfully created')
+                    print(f'    Option 2 success: Tile {output_raster} successfully created')
                 else:
-                    print(f'  Option 2 failure: Tile {output_raster} was not successfully created')
+                    print(f'    Option 2 failure: Tile {output_raster} was not successfully created')
     else:
-        print(f' Option 1 failure: {input_folder} does not contain any TCL tiles. Make sure TCL tiles have been downloaded.')
+        print(f'    Option 1 failure: {input_folder} does not contain any TCL tiles. Make sure TCL tiles have been downloaded.')
 
 
 def or_mask_logic(raster1, raster2, raster1_value=None, raster2_value=None):
@@ -345,84 +270,97 @@ def and_mask_logic(raster1, raster2, raster1_value=None, raster2_value=None):
     output_mask = arcpy.sa.Con(arcpy.Raster(r1_and_r2_mask) > 0, 1, 0)
     return output_mask
 
-def process_raster(tile_id, tcd, gain_tiles, whrc_tiles, mangrove_tiles, plantation_tiles, mask_tiles, tcd_threshold, gain, save_intermediates):
+def process_raster(tile_id, tcd, mask_tiles, tcd_threshold, gain, save_intermediates):
     #Paths to Mask, Input files
-    gain_raster_path = os.path.join(gain_tiles, f'{tile_id}_{cn.gain_local_pattern}.tif')
-    whrc_raster_path = os.path.join(whrc_tiles, f'{tile_id}_{cn.whrc_s3_pattern}.tif')
-    mangrove_raster_path = os.path.join(mangrove_tiles, f'{tile_id}_{cn.mangrove_s3_pattern}.tif')
-    plantation_raster_path = os.path.join(plantation_tiles, f'{tile_id}_{cn.plantation_s3_pattern}.tif')
-
-    print(f'Creating masks for {tile_id}:')
+    gain_raster_path = os.path.join(cn.gain_folder, f'{tile_id}_{cn.gain_local_pattern}.tif')
+    whrc_raster_path = os.path.join(cn.whrc_folder, f'{tile_id}_{cn.whrc_s3_pattern}.tif')
+    mangrove_raster_path = os.path.join(cn.mangrove_folder, f'{tile_id}_{cn.mangrove_s3_pattern}.tif')
+    plantation_raster_path = os.path.join(cn.plantations_folder, f'{tile_id}_{cn.plantation_s3_pattern}.tif')
+    print(f'Creating masks for {tile_id}: ')
 
     for tcd_val in tcd_threshold:
+        #Read in the plantation raster and mask before saving each intermediate
+        if os.path.exists(plantation_raster_path):
+            plantation_raster = arcpy.sa.IsNull(arcpy.Raster(plantation_raster_path))
+
         # Conditional logic for where TCD AND biomass
         tcd_whrc_mask = and_mask_logic(tcd, whrc_raster_path, tcd_val, 0)
         mask_path_tcd = os.path.join(mask_tiles, f'{tile_id}_tcd{tcd_val}')
 
-        if gain == True:
-            # Conditional logic for TCD AND biomass OR gain
-            tcd_gain_mask = or_mask_logic(gain_raster_path, tcd_whrc_mask, 0)
-            mask_path_tcd_gain = f'{mask_path_tcd}_gain'
-        else:
-            tcd_gain_mask = tcd_whrc_mask
-            mask_path_tcd_gain = mask_path_tcd
-
-        if os.path.exists(mangrove_raster_path):
-            # Conditional logic for TCD AND biomass OR gain OR mangrove
-            tcd_gain_mangrove_mask = or_mask_logic(mangrove_raster_path, tcd_gain_mask, 0)
-            mask_path_tcd_gain_mangrove = f'{mask_path_tcd_gain}_mangrove'
-        else:
-            tcd_gain_mangrove_mask = tcd_gain_mask
-            mask_path_tcd_gain_mangrove = mask_path_tcd_gain
-
-        if os.path.exists(plantation_raster_path):
-            # Read in the plantation raster and mask before saving each intermediate
-            plantation_raster = arcpy.sa.IsNull(arcpy.Raster(plantation_raster_path))
-
-            if save_intermediates == True:
-
-                # Conditional logic for TCD AND biomass NOT Pre-2000 Plantation
+        if save_intermediates == True:
+            # Conditional logic for TCD AND biomass NOT Pre-2000 Plantation
+            if os.path.exists(plantation_raster_path):
                 tcd_noplantation_mask = and_mask_logic(tcd_whrc_mask, plantation_raster)
                 mask_path_tcd_noplantation = f'{mask_path_tcd}_notPlantation'
 
                 # Saving the tcd_noplantation mask
                 print(f'    Saving {mask_path_tcd_noplantation}.tif')
+                tcd_noplantation_mask = arcpy.sa.SetNull(tcd_noplantation_mask == 0, tcd_noplantation_mask)
                 tcd_noplantation_mask.save(f'{mask_path_tcd_noplantation}.tif')
+                print(f'    Successfully finished')
 
-                # Conditional logic for TCD AND biomass OR gain NOT Pre-2000 Plantation
-                tcd_gain_noplantation_mask = and_mask_logic(tcd_gain_mask, plantation_raster)
-                mask_path_tcd_gain_noplantation = f'{mask_path_tcd_gain}_notPlantation'
-
-                # Saving the tcd_gain_noplantation mask
-                print(f'    Saving {mask_path_tcd_gain_noplantation}.tif')
-                tcd_gain_noplantation_mask.save(f'{mask_path_tcd_gain_noplantation}.tif')
-
-            # Conditional logic for TCD AND biomass OR gain OR mangrove NOT Pre-2000 Plantation
-            tcd_gain_mangrove_noplantation_mask = and_mask_logic(tcd_gain_mangrove_mask, plantation_raster)
-            mask_path_tcd_gain_mangrove_noplantation = f'{mask_path_tcd_gain_mangrove}_notPlantation'
-
-            # Saving the tcd_gain_mangrove_noplantation mask
-            print(f'    Saving {mask_path_tcd_gain_mangrove_noplantation}.tif')
-            tcd_gain_mangrove_noplantation_mask.save(f'{mask_path_tcd_gain_mangrove_noplantation}.tif')
-
-        else:
-            if save_intermediates == True:
+            else:
                 # Saving the tcd mask
                 print(f'    Saving {mask_path_tcd}.tif')
+                tcd_whrc_mask = arcpy.sa.SetNull(tcd_whrc_mask == 0, tcd_whrc_mask)
                 tcd_whrc_mask.save(f'{mask_path_tcd}.tif')
+                print(f'    Successfully finished')
 
-                # Saving the tcd_gain mask
-                print(f'    Saving {mask_path_tcd_gain}.tif')
-                tcd_gain_mask.save(f'{mask_path_tcd_gain}.tif')
+        if gain == True:
+            # Conditional logic for TCD AND biomass OR gain
+            tcd_gain_mask = or_mask_logic(gain_raster_path, tcd_whrc_mask, 0)
+            mask_path_tcd_gain = f'{mask_path_tcd}_gain'
 
-            # Saving tcd_gain_mangrove mask
-            print(f'    Saving {mask_path_tcd_gain_mangrove}.tif')
-            tcd_gain_mangrove_mask.save(f'{mask_path_tcd_gain_mangrove}.tif')
+            if save_intermediates == True:
+                # Conditional logic for TCD AND biomass OR gain NOT Pre-2000 Plantation
+                if os.path.exists(plantation_raster_path):
+                    tcd_gain_noplantation_mask = and_mask_logic(tcd_gain_mask, plantation_raster)
+                    mask_path_tcd_gain_noplantation = f'{mask_path_tcd_gain}_notPlantation'
 
-def process_zonal_statistics(aoi, aoi_name, raster_folder, mask_tiles, output_folder):
-    raster_list = pathjoin_files_in_directory(raster_folder, '.tif')
-    mask_list = pathjoin_files_in_directory(mask_tiles, '.tif')
+                    # Saving the tcd_gain_noplantation mask
+                    print(f'    Saving {mask_path_tcd_gain_noplantation}.tif')
+                    tcd_gain_noplantation_mask = arcpy.sa.SetNull(tcd_gain_noplantation_mask == 0, tcd_gain_noplantation_mask)
+                    tcd_gain_noplantation_mask.save(f'{mask_path_tcd_gain_noplantation}.tif')
+                    print(f'    Successfully finished')
 
+                else:
+                    # Saving the tcd_gain mask
+                    print(f'    Saving {mask_path_tcd_gain}.tif')
+                    tcd_gain_mask = arcpy.sa.SetNull(tcd_gain_mask == 0, tcd_gain_mask)
+                    tcd_gain_mask.save(f'{mask_path_tcd_gain}.tif')
+                    print(f'    Successfully finished')
+
+        else:
+            mask_path_tcd_gain = mask_path_tcd
+            tcd_gain_mask = tcd_whrc_mask
+
+        if os.path.exists(mangrove_raster_path):
+            # Conditional logic for TCD AND biomass OR gain OR mangrove
+            mangrove_raster = arcpy.sa.Con(arcpy.Raster(mangrove_raster_path) > 0, 1, 0)
+            tcd_gain_mangrove_raster = arcpy.ia.Merge([tcd_gain_mask, mangrove_raster], "SUM")
+            tcd_gain_mangrove_mask = arcpy.sa.Con(arcpy.Raster(tcd_gain_mangrove_raster) > 0, 1, 0)
+            mask_path_tcd_gain_mangrove = f'{mask_path_tcd_gain}_mangrove'
+
+            # Conditional logic for TCD AND biomass OR gain OR mangrove NOT Pre-2000 Plantation
+            if os.path.exists(plantation_raster_path):
+                tcd_gain_mangrove_noplantation_raster = arcpy.sa.Times(tcd_gain_mangrove_mask, plantation_raster)
+                tcd_gain_mangrove_noplantation_mask = arcpy.sa.Con(arcpy.Raster(tcd_gain_mangrove_noplantation_raster) > 0, 1, 0)
+                mask_path_tcd_gain_mangrove_noplantation = f'{mask_path_tcd_gain_mangrove}_notPlantation'
+
+                # Saving the tcd_gain_mangrove_noplantation mask
+                print(f'    Saving {mask_path_tcd_gain_mangrove_noplantation}.tif')
+                tcd_gain_mangrove_noplantation_mask = arcpy.sa.SetNull(tcd_gain_mangrove_noplantation_mask == 0, tcd_gain_mangrove_noplantation_mask)
+                tcd_gain_mangrove_noplantation_mask.save(f'{mask_path_tcd_gain_mangrove_noplantation}.tif')
+                print(f'    Successfully finished')
+
+            else:
+                # Saving tcd_gain_mangrove mask
+                print(f'Saving {mask_path_tcd_gain_mangrove}.tif')
+                tcd_gain_mangrove_mask = arcpy.sa.SetNull(tcd_gain_mangrove_mask == 0, tcd_gain_mangrove_mask)
+                tcd_gain_mangrove_mask.save(f'{mask_path_tcd_gain_mangrove}.tif')
+                print(f'    Successfully finished')
+
+def process_zonal_statistics(aoi, aoi_name, raster_list, mask_list, output_folder, field):
     for raster in raster_list:
         raster_name = get_raster_name(raster)
         raster_obj = arcpy.Raster(raster)
@@ -433,31 +371,84 @@ def process_zonal_statistics(aoi, aoi_name, raster_folder, mask_tiles, output_fo
             mask_name = mask_path.split("_", 2)[2]
             mask_obj = arcpy.Raster(mask)
 
-            # Check if spatial references and extents are the same
-            if (raster_obj.extent == mask_obj.extent and raster_obj.spatialReference.name == mask_obj.spatialReference.name):
-                # Create a name for the output table by concatenating the AOI name and raster name
-                output_name = "{}_{}.dbf".format(aoi_name, str(raster_name) + "_" + str(mask_name))
+            # Check if spatial references are the same
+            if (raster_obj.spatialReference.name == mask_obj.spatialReference.name):
+                print(f'    Masking {raster_name}.tif with {mask_name}.tif')
+                if field == "GID_0":
+                    output_name = "{}_{}.dbf".format(get_country_id(aoi_name), str(raster_name) + "_" + str(mask_name))
+                    csv_file = "{}_{}.csv".format(get_country_id(aoi_name), str(raster_name) + "_" + str(mask_name))
+                elif field == "Value":
+                    output_name = "{}_{}.dbf".format("TCL_annualized" + "_" +  str(get_country_id(aoi_name)), str(raster_name) + "_" + str(mask_name))
+                    csv_file = "{}_{}.csv".format("TCL_annualized" + "_" +  str(get_country_id(aoi_name)), str(raster_name) + "_" + str(mask_name))
                 output_path = os.path.join(output_folder, output_name)
 
-                print(f'    Masking {raster_name}.tif with {mask_name}.tif')
                 masked_raster = arcpy.sa.Times(raster_obj, mask_obj)
-                arcpy.gp.ZonalStatisticsAsTable_sa(aoi, "GID_0", masked_raster, output_path, "DATA", "SUM")
-
-                # Convert each output to csv
-                csv_file = "{}_{}.csv".format(aoi_name, str(raster_name) + "_" + str(mask_name))
+                arcpy.gp.ZonalStatisticsAsTable_sa(aoi, field, masked_raster, output_path, "DATA", "SUM")
                 arcpy.TableToTable_conversion(output_path, output_folder, csv_file)
                 print(f'    Successfully finished')
 
             else:
                 print(f"Spatial references or extents do not match for {raster} and {mask_name}")
 
-def load_and_process_csv(file_path, file_name):
-    csv_df = pd.read_csv(file_path)
+def clean_zonal_stats_csv(input_folders, df):
+    for folder in input_folders:
+        # Loop through the files in each folder
+        for file in os.listdir(folder):
+            if file.endswith(".csv"):
+                # Load the csv file into a pandas data frame
+                csv_df = pd.read_csv(os.path.join(folder, file))
+
+                # Add column with name of the file
+                csv_df["File"] = file
+
+                # Define type of calc
+                if "emis" in file:
+                    type = "gross emissions"
+                elif "removals" in file:
+                    type = "gross removals"
+                else:
+                    type = "net flux"
+                csv_df["Type"] = type
+
+                # Define extent of calc
+                if "forest_extent" in file:
+                    extent = "forest extent"
+                else:
+                    extent = "full extent"
+                csv_df["Extent"] = extent
+
+                # Define tcd threshold
+                tcd = re.match(r'.*tcd([0-9]+).*', file)
+                if tcd is not None:
+                    csv_df["Density"] = tcd.group(1)
+                else:
+                    csv_df["Density"] = 'NA'
+
+                # Define mask of calc
+                if "mangrove" in file:
+                    mask = "tcd, gain, mangrove"
+                elif "gain" in file:
+                    mask = "tcd, gain"
+                elif "tcd" in file:
+                    mask = "tcd"
+                else:
+                    mask = "no mask"
+                if "notPlantation" in file:
+                    mask = f'{mask}, NOT plantation'
+                csv_df["Mask"] = mask
+
+                # Drop all other fields
+                assert isinstance(csv_df, object)
+                csv_df.drop(['OID_', 'COUNT', 'AREA'], axis=1, inplace=True)
+
+                # Append the data to the main data frame
+                df = pd.concat([df, csv_df], axis=0)
+
+    return(df)
 
 #######################################################################################################################
 # AWS S3 file download utilities
 #######################################################################################################################
-
 def s3_flexible_download(tile_id_list, s3_dir, s3_pattern, local_dir, local_pattern = ''):
 
     # Creates a full download name (path and file)
