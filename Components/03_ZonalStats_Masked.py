@@ -1,14 +1,5 @@
-import arcpy
-import os
-import pandas
-from funcs import ZonalStatsMasked
+import constants_and_names as cn
+from funcs import zonal_stats_masked
 
-#TODO: Change workspace using working_directory
-
-arcpy.env.overwriteOutput = True
-
-# Set the workspace and input/output folders
-arcpy.env.workspace = r"C:\GIS\carbon_model\CarbonFlux_QA_2023"
-
-ZonalStatsMasked(arcpy.env.workspace)
-
+# Calculate zonal stats for all input rasters at each tcd threshold value
+zonal_stats_masked(cn.aois_folder, cn.input_folder, cn.mask_output_folder, cn.outputs_folder)
