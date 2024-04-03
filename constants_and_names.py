@@ -5,7 +5,7 @@ import os
 # USER INPUTS
 #####################################################################################
 # Set the working directory to the folder which contains the AOIS subfolder
-working_directory = r"C:\GIS\carbon_model\CarbonFlux_QA_v1.3.1"
+working_directory = r"C:\GIS\carbon_model\CarbonFlux_QA_v1.3.2"
 
 # Whether you want to overwrite previous arcpy outputs
 overwrite_arcgis_output = True
@@ -13,8 +13,8 @@ overwrite_arcgis_output = True
 # With each model update, change loss years and model_run_date
     # loss_years = number of years of tree cover loss (if input loss raster is changed, this must be changed, too)
     # model_run_date = s3 folder where per-pixel outputs from most recent model run are located
-loss_years = 22
-model_run_date = '20231114'
+loss_years = 23
+model_run_date = '20240308'
 
 # List of tile_ids to process (change according to which tiles overlap with your AOIS shapefiles)
 tile_list = ['00N_110E', '20N_020W']
@@ -110,6 +110,6 @@ mangrove_s3_pattern = 'mangrove_agb_t_ha_2000'
 plantation_s3_path = os.path.join(s3_base_dir, 'other_emissions_inputs/IDN_MYS_plantation_pre_2000/processed/20200724/')
 plantation_s3_pattern = 'plantation_2000_or_earlier_processed'
 
-# Annual Hansen loss tiles (2001-2022)
-loss_s3_path = 's3://gfw2-data/forest_change/hansen_2022/'
-loss_s3_pattern = 'GFW2022'
+# Annual Hansen loss tiles (2001-2023)
+loss_s3_path = 's3://gfw2-data/forest_change/hansen_2023/'
+loss_s3_pattern = 'GFW2023'
