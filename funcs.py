@@ -1,5 +1,6 @@
 import os
 import arcpy
+from arcpy import env
 import pandas as pd
 import logging
 import re
@@ -211,9 +212,9 @@ def get_gadm_boundary(country):
 
 def clip_to_gadm(country, input_raster, output_raster):
     clip_feature = get_gadm_boundary(country)
-    no_data_value = arcpy.Raster(input_raster).noDataValue
     print(f'    Saving {output_raster}')
-    clipped_raster = arcpy.management.Clip(input_raster, "#", output_raster, clip_feature, no_data_value, "ClippingGeometry", "MAINTAIN_EXTENT")
+    clipped_raster = arcpy.sa.ExtractByMask(input_raster, clip_feature, "INSIDE")
+    clipped_raster.save(output_raster)
     print(f'    Successfully finished')
 
 def clip_tcl_to_gadm(input_folder, output_folder):
