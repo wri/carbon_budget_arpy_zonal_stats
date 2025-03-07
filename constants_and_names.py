@@ -6,7 +6,7 @@ import os
 #####################################################################################
 # Set the working directory to the folder which contains the AOIS subfolder
 # You must have shapefiles in the AOIS folder for all regions you list in the tile_list and tile_dictionary
-working_directory = r"C:\GIS\carbon_model\CarbonFlux_QA_v1.4.0"
+working_directory = r"C:\GIS\carbon_model\CarbonFlux_QA_v1.4.1"
 
 # Whether you want to overwrite previous arcpy outputs
 overwrite_arcgis_output = True
@@ -17,7 +17,7 @@ overwrite_arcgis_output = True
 loss_years = 23
 
 removal_run_date = '20240308'
-emis_run_date = '20241122'
+emis_run_date = '20241230'
 
 # List of tile_ids to process (change according to which tiles overlap with your AOIS shapefiles)
 tile_list = ['00N_110E', '20N_020W']
@@ -127,5 +127,5 @@ loss_s3_path = 's3://gfw2-data/forest_change/hansen_2023/'
 loss_s3_pattern = 'GFW2023'
 
 # Drivers of tree cover loss (1km)
-drivers_s3_path = 's3://gfw2-data/drivers_of_loss/1_km/processed/20241121/'
-drivers_s3_pattern = 'drivers_of_TCL_1_km_20241121'
+drivers_s3_path = 's3://gfw2-data/drivers_of_loss/1_km/processed/20241224/'
+drivers_s3_pattern = 'drivers_of_TCL_1_km_20241224'
