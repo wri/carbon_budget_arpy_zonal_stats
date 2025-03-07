@@ -17,13 +17,13 @@ def download_files():
 
     # Step 2: Create Input folder and subfolder for each tile in tile_list
     print("Step 1.2: Creating Input folder structure")
-    create_tile_folders(cn.tile_list, cn.input_folder)
+    create_tile_folders(cn.tile_list, cn.fluxes_folder)
 
     # Step 3: Create Mask folder with Inputs subfolder (gain, mangrove, pre-200 plantations, and tree cover density) and
     # Mask subfolder (folder for each tile in tile_list)
     print("Step 1.3: Creating Mask folder structure")
     create_subfolders([cn.mask_input_folder, cn.gain_folder, cn.mangrove_folder, cn.plantations_folder, cn.tcd_folder, cn.whrc_folder])
-    create_tile_folders(cn.tile_list, cn.mask_output_folder)
+    create_tile_folders(cn.tile_list, cn.mask_output_tcd_folder)
 
     # Step 4: Create Output folder with Annual folder, CSV folder, and subfolder for each tile in tile_list
     print("Step 1.4: Creating Output folder structure")
@@ -34,55 +34,86 @@ def download_files():
     print("Step 1.5: Creating TCL folder structure")
     create_subfolders([cn.tcl_input_folder, cn.tcl_clip_folder])
 
-    # Step 6: Download emission/removal/netflux tiles (3 - 6 per tile) to Input folder
-    print("Step 1.6: Downloading files for Input folder")
-    if cn.extent == 'full' or cn.extent == 'both':
-        s3_flexible_download(cn.tile_list, cn.gross_emis_full_extent_s3_path, cn.gross_emis_full_extent_s3_pattern, cn.input_folder)
-        s3_flexible_download(cn.tile_list, cn.gross_removals_full_extent_s3_path, cn.gross_removals_full_extent_s3_pattern, cn.input_folder)
-        s3_flexible_download(cn.tile_list, cn.netflux_full_extent_s3_path, cn.netflux_full_extent_s3_pattern, cn.input_folder)
-    if cn.extent == 'forest' or cn.extent == 'both':
-        s3_flexible_download(cn.tile_list, cn.gross_emis_forest_extent_s3_path, cn.gross_emis_forest_extent_s3_pattern, cn.input_folder)
-        s3_flexible_download(cn.tile_list, cn.gross_removals_forest_extent_s3_path, cn.gross_removals_forest_extent_s3_pattern, cn.input_folder)
-        s3_flexible_download(cn.tile_list, cn.netflux_forest_extent_s3_path, cn.netflux_forest_extent_s3_pattern, cn.input_folder)
+    # Step 6: Create Drivers folder structure
+    print("Step 1.6: Creating Drivers folder structure")
+    create_subfolders([cn.drivers_input_folder, cn.drivers_fillnodata_folder, cn.drivers_clip_folder])
 
-    # Step 7: Download Gain, Mangrove, Pre_2000_Plantations, TCD, and WHRC subfolders for each tile to Mask, Inputs subfolders
-    print("Step 1.7: Downloading files for Mask/Inputs folder")
+    # Step 7: Download emission/removal/netflux tiles (3 - 6 per tile) to Input folder
+    print("Step 1.7: Downloading files for Input folder")
+    if cn.extent == 'full' or cn.extent == 'both':
+        s3_flexible_download(cn.tile_list, cn.gross_emis_full_extent_s3_path, cn.gross_emis_full_extent_s3_pattern, cn.fluxes_folder)
+        s3_flexible_download(cn.tile_list, cn.gross_removals_full_extent_s3_path, cn.gross_removals_full_extent_s3_pattern, cn.fluxes_folder)
+        s3_flexible_download(cn.tile_list, cn.netflux_full_extent_s3_path, cn.netflux_full_extent_s3_pattern, cn.fluxes_folder)
+    if cn.extent == 'forest' or cn.extent == 'both':
+        s3_flexible_download(cn.tile_list, cn.gross_emis_forest_extent_s3_path, cn.gross_emis_forest_extent_s3_pattern, cn.fluxes_folder)
+        s3_flexible_download(cn.tile_list, cn.gross_removals_forest_extent_s3_path, cn.gross_removals_forest_extent_s3_pattern, cn.fluxes_folder)
+        s3_flexible_download(cn.tile_list, cn.netflux_forest_extent_s3_path, cn.netflux_forest_extent_s3_pattern, cn.fluxes_folder)
+
+    # Step 8: Download Gain, Mangrove, Pre_2000_Plantations, TCD, ND WHRC subfolders for each tile to Mask, Inputs subfolders
+    print("Step 1.8: Downloading files for Mask/Inputs folder")
     s3_flexible_download(cn.tile_list, cn.gain_s3_path, cn.gain_s3_pattern, cn.gain_folder, cn.gain_local_pattern)
     s3_flexible_download(cn.tile_list, cn.mangrove_s3_path, cn.mangrove_s3_pattern, cn.mangrove_folder)
     s3_flexible_download(cn.tile_list, cn.plantation_s3_path, cn.plantation_s3_pattern, cn.plantations_folder)
     s3_flexible_download(cn.tile_list, cn.tcd_s3_path, cn.tcd_s3_pattern, cn.tcd_folder)
     s3_flexible_download(cn.tile_list, cn.whrc_s3_path, cn.whrc_s3_pattern, cn.whrc_folder)
 
-    # Step 8: Download TCL tiles to TCL, Inputs folder
-    print("Step 1.8: Downloading files for TCL/Inputs folder")
+    # Step 9: Download TCL tiles to TCL, Inputs folder
+    print("Step 1.9: Downloading files for TCL/Inputs folder")
     s3_flexible_download(cn.tile_list, cn.loss_s3_path, cn.loss_s3_pattern, cn.tcl_input_folder)
+
+    # Step 10: Download Drivers tiles to Drivers, Inputs folder
+    print("Step 1.10: Downloading files for TCL/Inputs folder")
+    s3_flexible_download(cn.tile_list, cn.drivers_s3_path, cn.drivers_s3_pattern, cn.drivers_input_folder)
 
 def create_masks(tcd_threshold, gain, save_intermediates):
     # Get a list of tcd tiles in the tcd folder
     tcd_list = pathjoin_files_in_directory(cn.tcd_folder, '.tif')
     for tcd in tcd_list:
         tile_id = get_tile_id(get_raster_name(tcd))
-        mask_tiles = os.path.join(cn.mask_output_folder, tile_id)
-        process_raster(tile_id, tcd, mask_tiles, tcd_threshold, gain, save_intermediates)
+        mask_tiles = os.path.join(cn.mask_output_tcd_folder, tile_id)
+        process_tcd_masks(tile_id, tcd, mask_tiles, tcd_threshold, gain, save_intermediates)
 
-def zonal_stats_masked(aois_folder, input_folder, mask_outputs_folder, outputs_folder):
-    aoi_list = pathjoin_files_in_directory(aois_folder, '.shp')
-    for aoi in aoi_list:
-        aoi_name = get_raster_name(aoi)
-        print(f"Now processing {aoi_name}:")
-        tile_id = get_tile_id_from_country(get_country_id(aoi_name))
+def zonal_stats_drivers(drivers_clip_folder, input_folder, mask_outputs_folder, outputs_folder):
+    # Set drivers no data value to 0 so we can get zonal stats for where there is no driver class
+    drivers_clip_list = pathjoin_files_in_directory(drivers_clip_folder, '.tif')
+
+    if len(drivers_clip_list) < 1:
+        # Setting noData value to 0
+        print(f"Setting no data values in drivers tiles to 0")
+        drivers_list = pathjoin_files_in_directory(cn.drivers_input_folder, '.tif')
+        for driver in drivers_list:
+            driver_pattern = get_raster_name(driver)
+            driver_raster = arcpy.Raster(driver)
+            driver_raster = arcpy.sa.Con(arcpy.sa.IsNull(driver_raster) == 1, 0, driver_raster)
+            driver_raster.save(os.path.join(cn.drivers_fillnodata_folder, f'{driver_pattern}.tif'))
+            print(f"    Saving {driver}")
+
+        # Clipping to GADM extent
+        print("Clipping drivers tiles to GADM boundaries")
+        clip_tiles_to_gadm(cn.drivers_fillnodata_folder, drivers_clip_folder)
+
+        # Get new clip list
+        drivers_clip_list = pathjoin_files_in_directory(drivers_clip_folder, '.tif')
+    else:
+        print(f"Found {len(drivers_clip_list)} clipped TCL rasters.")
+
+    for driver in drivers_clip_list:
+        driver_name = get_raster_name(driver)
+        driver_raster = arcpy.Raster(driver)
+        print(f"Now processing {driver_name}.tif:")
+        tile_id = get_tile_id(driver)
         raster_folder = os.path.join(input_folder, tile_id)
         raster_list = pathjoin_files_in_directory(raster_folder, '.tif')
         mask_tiles = os.path.join(mask_outputs_folder, tile_id)
         mask_list = pathjoin_files_in_directory(mask_tiles, '.tif')
         output_folder = os.path.join(outputs_folder, tile_id)
-        process_zonal_statistics(aoi, aoi_name, raster_list, mask_list, output_folder, "GID_0")
+        process_zonal_statistics(driver_raster, driver_name, raster_list, mask_list, output_folder, "drivers")
 
 def zonal_stats_annualized(tcl_clip_folder, input_folder, mask_outputs_folder, annual_folder):
     tcl_list = pathjoin_files_in_directory(tcl_clip_folder, '.tif')
     if len(tcl_list) < 1:
         print("Clipping TCL tiles to GADM boundaries")
-        clip_tcl_to_gadm(cn.tcl_input_folder, cn.tcl_clip_folder)
+        clip_tiles_to_gadm(cn.tcl_input_folder, cn.tcl_clip_folder)
         tcl_list = pathjoin_files_in_directory(tcl_clip_folder, '.tif')
     else:
         print(f"Found {len(tcl_list)} clipped TCL rasters.")
@@ -97,7 +128,7 @@ def zonal_stats_annualized(tcl_clip_folder, input_folder, mask_outputs_folder, a
         raster_list = [os.path.join(raster_folder, f) for f in os.listdir(raster_folder) if "emis" in f and f.endswith('tif')]
         mask_tiles = os.path.join(mask_outputs_folder, tile_id)
         mask_list = pathjoin_files_in_directory(mask_tiles, '.tif')
-        process_zonal_statistics(tcl_raster, tcl_name, raster_list, mask_list, annual_folder, "Value")
+        process_zonal_statistics(tcl_raster, tcl_name, raster_list, mask_list, annual_folder, "annual")
 
 def zonal_stats_clean():
     # Initialize an empty data frame to store the data
@@ -111,30 +142,71 @@ def zonal_stats_clean():
     # Combine masked zonal stats output csvs
     masked_output = clean_zonal_stats_csv(masked_input_folders, df)
 
+    # Rename drivers
+    masked_output.loc[masked_output["Value"] == 0, "Value"] = "No_Driver"
+    masked_output.loc[masked_output["Value"] == 1, "Value"] = "Permanent_Agriculture"
+    masked_output.loc[masked_output["Value"] == 2, "Value"] = "Hard_Commodities"
+    masked_output.loc[masked_output["Value"] == 3, "Value"] = "Shifting_Cultivation"
+    masked_output.loc[masked_output["Value"] == 4, "Value"] = "Forest_Management"
+    masked_output.loc[masked_output["Value"] == 5, "Value"] = "Wildfire"
+    masked_output.loc[masked_output["Value"] == 6, "Value"] = "Settlements_Infrastructure"
+    masked_output.loc[masked_output["Value"] == 7, "Value"] = "Other_Natural_Disturbances"
+
     # Clean masked output dataframe
-    masked_output.drop(['ZONE_CODE'], axis=1, inplace=True)
-    masked_output.rename(columns={"GID_0": "Country", "SUM": "Sum"}, inplace = True)
+    masked_output.rename(columns={"SUM": "Sum"}, inplace = True)
+
+    # Pivot annual output stats
+    masked_pivot = masked_output.pivot(columns="Value", values="Sum", index="File")
+
+    # Reformat masked_output df to combine with masked_pivot
+    masked_output.drop(['Value'], axis=1, inplace=False)
+    masked_output = masked_output.groupby("File", as_index=False).agg({
+        "Sum": "sum",
+        "Type": "first",
+        "Extent": "first",
+        "Density": "first",
+        "Mask": "first",
+    })
+    masked_pivot.reset_index(inplace=True)
+
+    # Join pivoted drivers column with the other columns
+    masked_output = masked_output.set_index('File').join(masked_pivot.set_index('File'), on="File")
+    masked_output.reset_index(inplace=True)
+
+    # Make sure drivers emission sums match
+    columns_to_sum = ["No_Driver", "Permanent_Agriculture", "Hard_Commodities", "Shifting_Cultivation", "Forest_Management", "Wildfire", "Settlements_Infrastructure", "Other_Natural_Disturbances"]
+    masked_output["Drivers_Sum"] = masked_output[columns_to_sum].sum(axis=1, min_count=1)
+    masked_output["DriversQC"] = masked_output["Sum"].round() == masked_output["Drivers_Sum"].round()
+
+    # Reorder columns
+    order = ["File", "Sum", "Type", "Extent", "Density", "Mask", "Permanent_Agriculture", "Hard_Commodities",
+             "Shifting_Cultivation", "Forest_Management", "Wildfire", "Settlements_Infrastructure",
+             "Other_Natural_Disturbances", "No_Driver", "Drivers_Sum", "DriversQC"]
+    masked_output = masked_output[order]
 
     # Create a list of all annual zonal stats output folders
     annual_input_folders = [cn.annual_folder]
 
     # Combine annual zonal stats outputs csvs
     annual_output = clean_zonal_stats_csv(annual_input_folders, df)
-    annual_output.reset_index(inplace=True)
 
     # Clean and pivot annual output stats
     annual_output["VALUE"] = annual_output["VALUE"] + 2000
     annual_output = annual_output.pivot(columns="VALUE", values="SUM", index="File")
     annual_output.reset_index(inplace=True)
 
+    # Match file names and sum annual values
+    annual_output["File"] = annual_output["File"].str.replace(r'annualized_[A-Z]{3}_', '', regex=True)
+    annual_output["Annual_Sum"] = annual_output.loc[:, 2001:].sum(axis=1, min_count=1)
+
     # Join annual output zonal stats to masked zonal stats
-    annual_output["File"] = annual_output["File"].apply(lambda x: x.removeprefix("TCL_annualized_"))
     final_output = masked_output.set_index('File').join(annual_output.set_index('File'), on = "File")
     final_output.reset_index(inplace=True)
 
-    # Make sure emission sums match
-    final_output["Annual_Sum"] =final_output.loc[:,2001:].sum(axis=1, min_count=1)
-    final_output["Match"] = final_output["Sum"].round() == final_output["Annual_Sum"].round()
+    # Make sure annual emission sums match
+    if final_output["File"].str.contains("emis", case=False, na=False).any():
+        mask = final_output["File"].str.contains("emis", case=False, na=False)
+        final_output.loc[mask, "AnnualQC"] = final_output.loc[mask, "Sum"].round() == final_output.loc[mask, "Annual_Sum"].round()
 
     # Define the output location
     output_path = os.path.join(cn.csv_folder, "final_output.csv")
@@ -217,11 +289,11 @@ def clip_to_gadm(country, input_raster, output_raster):
     clipped_raster.save(output_raster)
     print(f'    Successfully finished')
 
-def clip_tcl_to_gadm(input_folder, output_folder):
-    print(f'    Option 1: Checking if clipped TCL tiles already exist...')
-    tcl_list = list_files_in_directory(input_folder, ".tif")
-    if len(tcl_list) >= 1:
-        for raster in tcl_list:
+def clip_tiles_to_gadm(input_folder, output_folder):
+    print(f'    Option 1: Checking if clipped tiles already exist...')
+    tile_list = list_files_in_directory(input_folder, ".tif")
+    if len(tile_list) >= 1:
+        for raster in tile_list:
             raster_name = get_raster_name(raster)
             tile_id = get_tile_id(raster)
             country = get_country_id_from_tile_id(tile_id)
@@ -233,7 +305,7 @@ def clip_tcl_to_gadm(input_folder, output_folder):
                 print(f"    Option 1 success: Tile {output_raster} already exists.")
             else:
                 print(f'    Option 1 failure: Tile {output_raster} does not already exists."')
-                print(f'    Option 2: Clipping TCL tile to GADM boundary')
+                print(f'    Option 2: Clipping tile to GADM boundary')
                 clip_to_gadm(country, input_raster, output_raster)
 
                 if os.path.exists(output_raster):
@@ -241,7 +313,7 @@ def clip_tcl_to_gadm(input_folder, output_folder):
                 else:
                     print(f'    Option 2 failure: Tile {output_raster} was not successfully created')
     else:
-        print(f'    Option 1 failure: {input_folder} does not contain any TCL tiles. Make sure TCL tiles have been downloaded.')
+        print(f'    Option 1 failure: {input_folder} does not contain any input tiles. Make sure input tiles have been downloaded.')
 
 
 def or_mask_logic(raster1, raster2, raster1_value=None, raster2_value=None):
@@ -271,7 +343,7 @@ def and_mask_logic(raster1, raster2, raster1_value=None, raster2_value=None):
     output_mask = arcpy.sa.Con(arcpy.Raster(r1_and_r2_mask) > 0, 1, 0)
     return output_mask
 
-def process_raster(tile_id, tcd, mask_tiles, tcd_threshold, gain, save_intermediates):
+def process_tcd_masks(tile_id, tcd, mask_tiles, tcd_threshold, gain, save_intermediates):
     #Paths to Mask, Input files
     gain_raster_path = os.path.join(cn.gain_folder, f'{tile_id}_{cn.gain_local_pattern}.tif')
     whrc_raster_path = os.path.join(cn.whrc_folder, f'{tile_id}_{cn.whrc_s3_pattern}.tif')
@@ -361,7 +433,7 @@ def process_raster(tile_id, tcd, mask_tiles, tcd_threshold, gain, save_intermedi
                 tcd_gain_mangrove_mask.save(f'{mask_path_tcd_gain_mangrove}.tif')
                 print(f'    Successfully finished')
 
-def process_zonal_statistics(aoi, aoi_name, raster_list, mask_list, output_folder, field):
+def process_zonal_statistics(aoi, aoi_name, raster_list, mask_list, output_folder, stat_type):
     for raster in raster_list:
         raster_name = get_raster_name(raster)
         raster_obj = arcpy.Raster(raster)
@@ -372,19 +444,20 @@ def process_zonal_statistics(aoi, aoi_name, raster_list, mask_list, output_folde
             mask_name = mask_path.split("_", 2)[2]
             mask_obj = arcpy.Raster(mask)
 
+
             # Check if spatial references are the same
             if (raster_obj.spatialReference.name == mask_obj.spatialReference.name):
                 print(f'    Masking {raster_name}.tif with {mask_name}.tif')
-                if field == "GID_0":
+                if stat_type == "drivers":
                     output_name = "{}_{}.dbf".format(get_country_id(aoi_name), str(raster_name) + "_" + str(mask_name))
                     csv_file = "{}_{}.csv".format(get_country_id(aoi_name), str(raster_name) + "_" + str(mask_name))
-                elif field == "Value":
+                elif stat_type == "annual":
                     output_name = "{}_{}.dbf".format("TCL_annualized" + "_" +  str(get_country_id(aoi_name)), str(raster_name) + "_" + str(mask_name))
                     csv_file = "{}_{}.csv".format("TCL_annualized" + "_" +  str(get_country_id(aoi_name)), str(raster_name) + "_" + str(mask_name))
                 output_path = os.path.join(output_folder, output_name)
 
                 masked_raster = arcpy.sa.Times(raster_obj, mask_obj)
-                arcpy.gp.ZonalStatisticsAsTable_sa(aoi, field, masked_raster, output_path, "DATA", "SUM")
+                arcpy.gp.ZonalStatisticsAsTable_sa(aoi, 'Value', masked_raster, output_path, "DATA", "SUM")
                 arcpy.TableToTable_conversion(output_path, output_folder, csv_file)
                 print(f'    Successfully finished')
 

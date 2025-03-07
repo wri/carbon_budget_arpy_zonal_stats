@@ -57,7 +57,7 @@
 
     Three separate outputs from the Carbon Flux Model, each with two different extents, are used as inputs in 
     this tool. This is a total of six different possible inputs. Inputs include gross emissions (all gasses), 
-    gross removals (CO2), and net flux (CO2e). All are in inputs Mg / pixel. You have the option to calculate 
+    gross removals (CO2), and net flux (CO2e). All are in units Mg / pixel. You have the option to calculate 
     zonal statistics according to tile extent: forest extent only, full extent only, or both extents.
 
 | AOI | Extent | Type            | Units         | Tile     |
@@ -80,14 +80,15 @@
 
     Other auxiliary inputs for this tool include:
 
-| Dataset              | Use Description                                                                          |
-|----------------------|------------------------------------------------------------------------------------------|
-| Tree Cover Gain      | Used to create tree cover gain mask.                                                     |
-| Above Ground Biomass | Used to filter tree cover gain mask to only pixels that contain biomass.                 |
-| Tree Cover Density   | Used to create density threshold mask.                                                   |
-| Mangrove Extent      | Used to create Mangrove mask. Areas of mangrove included in mask.                        |
-| Pre-2000 Plantations | Used to create Pre-2000 plantations mask. Pre-2000 plantations masked from calculations. |
-| Tree Cover Loss      | Used to calculate annual emissions.                                                      |
+| Dataset               | Use Description                                                                         |
+|-----------------------|-----------------------------------------------------------------------------------------|
+| Tree Cover Gain       | Used to create tree cover gain mask.                                                    |
+| Above Ground Biomass  | Used to filter tree cover gain mask to only pixels that contain biomass.                |
+| Tree Cover Density    | Used to create density threshold mask.                                                  |
+| Mangrove Extent       | Used to create Mangrove mask. Areas of mangrove included in mask.                       |
+| Pre-2000 Plantations  | Used to create Pre-2000 plantations mask. Pre-2000 plantations masked from calculations. |
+| Tree Cover Loss (TCL) | Used to calculate annual emissions.                                                     |
+| Driver of TCL         | Used to calculate emissions by driver.                                                  |
 
 
 ### Outputs:
