@@ -1,4 +1,5 @@
 from funcs import download_files
 
-# Create folder structure, download files, and clip TCL rasters to GADM extent
+# Create folder structure and download files
+print("Step 1: Downloading Files... \n")
 download_files()

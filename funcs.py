@@ -38,8 +38,12 @@ def download_files():
     print("Step 1.6: Creating Drivers folder structure")
     create_subfolders([cn.drivers_input_folder, cn.drivers_fillnodata_folder, cn.drivers_clip_folder])
 
-    # Step 7: Download emission/removal/netflux tiles (3 - 6 per tile) to Input folder
-    print("Step 1.7: Downloading files for Input folder")
+    # Step 7: Create TCLF folder structure
+    print("Step 1.7: Creating TCLF folder structure")
+    create_subfolders([cn.tclf_input_folder, cn.tclf_clip_folder])
+
+    # Step 8: Download emission/removal/netflux tiles (3 - 6 per tile) to Input folder
+    print("Step 1.8: Downloading files for Input folder")
     if cn.extent == 'full' or cn.extent == 'both':
         s3_flexible_download(cn.tile_list, cn.gross_emis_full_extent_s3_path, cn.gross_emis_full_extent_s3_pattern, cn.fluxes_folder)
         s3_flexible_download(cn.tile_list, cn.gross_removals_full_extent_s3_path, cn.gross_removals_full_extent_s3_pattern, cn.fluxes_folder)
@@ -49,29 +53,33 @@ def download_files():
         s3_flexible_download(cn.tile_list, cn.gross_removals_forest_extent_s3_path, cn.gross_removals_forest_extent_s3_pattern, cn.fluxes_folder)
         s3_flexible_download(cn.tile_list, cn.netflux_forest_extent_s3_path, cn.netflux_forest_extent_s3_pattern, cn.fluxes_folder)
 
-    # Step 8: Download Gain, Mangrove, Pre_2000_Plantations, TCD, ND WHRC subfolders for each tile to Mask, Inputs subfolders
-    print("Step 1.8: Downloading files for Mask/Inputs folder")
+    # Step 9: Download Gain, Mangrove, Pre_2000_Plantations, TCD, and WHRC subfolders for each tile to Mask, Inputs subfolders
+    print("Step 1.9: Downloading files for Mask/Inputs folder")
     s3_flexible_download(cn.tile_list, cn.gain_s3_path, cn.gain_s3_pattern, cn.gain_folder, cn.gain_local_pattern)
     s3_flexible_download(cn.tile_list, cn.mangrove_s3_path, cn.mangrove_s3_pattern, cn.mangrove_folder)
     s3_flexible_download(cn.tile_list, cn.plantation_s3_path, cn.plantation_s3_pattern, cn.plantations_folder)
     s3_flexible_download(cn.tile_list, cn.tcd_s3_path, cn.tcd_s3_pattern, cn.tcd_folder)
     s3_flexible_download(cn.tile_list, cn.whrc_s3_path, cn.whrc_s3_pattern, cn.whrc_folder)
 
-    # Step 9: Download TCL tiles to TCL, Inputs folder
-    print("Step 1.9: Downloading files for TCL/Inputs folder")
+    # Step 10: Download TCL tiles to TCL inputs folder
+    print("Step 1.10: Downloading files for TCL/Inputs folder")
     s3_flexible_download(cn.tile_list, cn.loss_s3_path, cn.loss_s3_pattern, cn.tcl_input_folder)
 
-    # Step 10: Download Drivers tiles to Drivers, Inputs folder
-    print("Step 1.10: Downloading files for TCL/Inputs folder")
+    # Step 11: Download Drivers tiles to Drivers inputs folder
+    print("Step 1.11: Downloading files for TCL/Inputs folder")
     s3_flexible_download(cn.tile_list, cn.drivers_s3_path, cn.drivers_s3_pattern, cn.drivers_input_folder)
 
-def create_masks(tcd_threshold, gain, save_intermediates):
+    # Step 12: Download TCLF tiles to TCLF inputs folder
+    print("Step 1.12: Downloading files for TCLF/Inputs folder")
+    s3_flexible_download(cn.tile_list, cn.tclf_s3_path, cn.tclf_s3_pattern, cn.tclf_input_folder)
+
+def create_masks(tcd_threshold):
     # Get a list of tcd tiles in the tcd folder
     tcd_list = pathjoin_files_in_directory(cn.tcd_folder, '.tif')
     for tcd in tcd_list:
         tile_id = get_tile_id(get_raster_name(tcd))
         mask_tiles = os.path.join(cn.mask_output_tcd_folder, tile_id)
-        process_tcd_masks(tile_id, tcd, mask_tiles, tcd_threshold, gain, save_intermediates)
+        process_tcd_masks(tile_id, tcd, mask_tiles, tcd_threshold)
 
 def zonal_stats_drivers(drivers_clip_folder, input_folder, mask_outputs_folder, outputs_folder):
     # Set drivers no data value to 0 so we can get zonal stats for where there is no driver class
@@ -130,6 +138,30 @@ def zonal_stats_annualized(tcl_clip_folder, input_folder, mask_outputs_folder, a
         mask_list = pathjoin_files_in_directory(mask_tiles, '.tif')
         process_zonal_statistics(tcl_raster, tcl_name, raster_list, mask_list, annual_folder, "annual")
 
+def zonal_stats_fire_annualized(tclf_clip_folder, input_folder, mask_outputs_folder, annual_folder):
+    tclf_list = pathjoin_files_in_directory(tclf_clip_folder, '.tif')
+    if len(tclf_list) < 1:
+        print("Clipping TCLF tiles to GADM boundaries")
+        clip_tiles_to_gadm(cn.tclf_input_folder, cn.tclf_clip_folder)
+        tclf_list = pathjoin_files_in_directory(tclf_clip_folder, '.tif')
+    else:
+        print(f"Found {len(tclf_list)} clipped TCLF rasters.")
+
+    for tclf in tclf_list:
+        tclf_name = get_raster_name(tclf)
+        tclf_raster = arcpy.Raster(tclf)
+        tclf_raster = arcpy.sa.SetNull(tclf_raster == 0, tclf_raster)
+        print(f"Now processing {tclf_name}.tif:")
+        tile_id = get_tile_id(tclf)
+        raster_folder = os.path.join(input_folder, tile_id)
+        raster_list = [os.path.join(raster_folder, f) for f in os.listdir(raster_folder) if
+                       "emis" in f and f.endswith('tif')]
+        mask_tiles = os.path.join(mask_outputs_folder, tile_id)
+        mask_list = pathjoin_files_in_directory(mask_tiles, '.tif')
+        process_zonal_statistics(tclf_raster, tclf_name, raster_list, mask_list, annual_folder, "tclf")
+
+
+
 def zonal_stats_clean():
     # Initialize an empty data frame to store the data
     df = pd.DataFrame()
@@ -143,25 +175,27 @@ def zonal_stats_clean():
     masked_output = clean_zonal_stats_csv(masked_input_folders, df)
 
     # Rename drivers
-    masked_output.loc[masked_output["Value"] == 0, "Value"] = "No_Driver"
-    masked_output.loc[masked_output["Value"] == 1, "Value"] = "Permanent_Agriculture"
-    masked_output.loc[masked_output["Value"] == 2, "Value"] = "Hard_Commodities"
-    masked_output.loc[masked_output["Value"] == 3, "Value"] = "Shifting_Cultivation"
-    masked_output.loc[masked_output["Value"] == 4, "Value"] = "Forest_Management"
+    masked_output.loc[masked_output["Value"] == 0, "Value"] = "Unknown"
+    masked_output.loc[masked_output["Value"] == 1, "Value"] = "Permanent_agriculture"
+    masked_output.loc[masked_output["Value"] == 2, "Value"] = "Hard_commodities"
+    masked_output.loc[masked_output["Value"] == 3, "Value"] = "Shifting_cultivation"
+    masked_output.loc[masked_output["Value"] == 4, "Value"] = "Logging"
     masked_output.loc[masked_output["Value"] == 5, "Value"] = "Wildfire"
-    masked_output.loc[masked_output["Value"] == 6, "Value"] = "Settlements_Infrastructure"
-    masked_output.loc[masked_output["Value"] == 7, "Value"] = "Other_Natural_Disturbances"
+    masked_output.loc[masked_output["Value"] == 6, "Value"] = "Settlements_&_Infrastructure"
+    masked_output.loc[masked_output["Value"] == 7, "Value"] = "Other_natural_disturbances"
 
     # Clean masked output dataframe
-    masked_output.rename(columns={"SUM": "Sum"}, inplace = True)
+    masked_output.rename(columns={"SUM": "Total"}, inplace = True)
 
     # Pivot annual output stats
-    masked_pivot = masked_output.pivot(columns="Value", values="Sum", index="File")
+    masked_pivot = masked_output.pivot(columns="Value", values="Total", index="TCL_File")
 
     # Reformat masked_output df to combine with masked_pivot
     masked_output.drop(['Value'], axis=1, inplace=False)
-    masked_output = masked_output.groupby("File", as_index=False).agg({
-        "Sum": "sum",
+    masked_output = masked_output.groupby("TCL_File", as_index=False).agg({
+        "ISO": "first",
+        "File": "first",
+        "Total": "sum",
         "Type": "first",
         "Extent": "first",
         "Density": "first",
@@ -170,18 +204,18 @@ def zonal_stats_clean():
     masked_pivot.reset_index(inplace=True)
 
     # Join pivoted drivers column with the other columns
-    masked_output = masked_output.set_index('File').join(masked_pivot.set_index('File'), on="File")
+    masked_output = masked_output.set_index("TCL_File").join(masked_pivot.set_index("TCL_File"), on="TCL_File")
     masked_output.reset_index(inplace=True)
 
     # Make sure drivers emission sums match
-    columns_to_sum = ["No_Driver", "Permanent_Agriculture", "Hard_Commodities", "Shifting_Cultivation", "Forest_Management", "Wildfire", "Settlements_Infrastructure", "Other_Natural_Disturbances"]
-    masked_output["Drivers_Sum"] = masked_output[columns_to_sum].sum(axis=1, min_count=1)
-    masked_output["DriversQC"] = masked_output["Sum"].round() == masked_output["Drivers_Sum"].round()
+    columns_to_sum = ["Unknown", "Permanent_agriculture", "Hard_commodities", "Shifting_cultivation", "Logging", "Wildfire", "Settlements_&_Infrastructure", "Other_natural_disturbances"]
+    masked_output["Drivers_total"] = masked_output[columns_to_sum].sum(axis=1, min_count=1)
+    masked_output["Drivers_QC"] = masked_output["Total"].round() == masked_output["Drivers_total"].round()
 
     # Reorder columns
-    order = ["File", "Sum", "Type", "Extent", "Density", "Mask", "Permanent_Agriculture", "Hard_Commodities",
-             "Shifting_Cultivation", "Forest_Management", "Wildfire", "Settlements_Infrastructure",
-             "Other_Natural_Disturbances", "No_Driver", "Drivers_Sum", "DriversQC"]
+    order = ["TCL_File", "ISO", "File", "Total", "Type", "Extent", "Density", "Mask", "Permanent_agriculture",
+             "Hard_commodities", "Shifting_cultivation", "Logging", "Wildfire", "Settlements_&_Infrastructure",
+             "Other_natural_disturbances", "Unknown", "Drivers_total", "Drivers_QC"]
     masked_output = masked_output[order]
 
     # Create a list of all annual zonal stats output folders
@@ -190,23 +224,66 @@ def zonal_stats_clean():
     # Combine annual zonal stats outputs csvs
     annual_output = clean_zonal_stats_csv(annual_input_folders, df)
 
-    # Clean and pivot annual output stats
-    annual_output["VALUE"] = annual_output["VALUE"] + 2000
-    annual_output = annual_output.pivot(columns="VALUE", values="SUM", index="File")
-    annual_output.reset_index(inplace=True)
+    # Keep only annual emissions rows
+    annual_emis = annual_output[annual_output["TCL_File"].str.contains("emis", case=False, na=False)].copy()
 
-    # Match file names and sum annual values
-    annual_output["File"] = annual_output["File"].str.replace(r'annualized_[A-Z]{3}_', '', regex=True)
-    annual_output["Annual_Sum"] = annual_output.loc[:, 2001:].sum(axis=1, min_count=1)
+    # Split gross annual and fire annual based on file naming
+    gross_annual = annual_emis[annual_emis["TCL_File"].str.contains(r"^TCL_annualized_", regex=True, na=False)].copy()
+    fire_annual = annual_emis[annual_emis["TCL_File"].str.contains(r"^TCL_fire_annualized_", regex=True, na=False)].copy()
+
+    # Convert to year
+    gross_annual["VALUE"] = gross_annual["VALUE"] + 2000
+    fire_annual["VALUE"] = fire_annual["VALUE"] + 2000
+
+    # Pivot to wide format
+    gross_annual = gross_annual.pivot(columns="VALUE", values="SUM", index=["ISO", "File"])
+    gross_annual.reset_index(inplace=True)
+
+    fire_annual = fire_annual.pivot(columns="VALUE", values="SUM", index=["ISO", "File"])
+    fire_annual.reset_index(inplace=True)
+
+    year_cols = list(range(2001, 2001 + cn.loss_years))
+
+    # Ensure all year columns exist
+    for year in year_cols:
+        if year not in gross_annual.columns:
+            gross_annual[year] = 0
+        if year not in fire_annual.columns:
+            fire_annual[year] = 0
+
+    # Rename annual gross and fire emission columns
+    gross_annual.rename(columns={year: f"gross_emissions_{year}__MgCO2e" for year in year_cols}, inplace=True)
+    fire_annual.rename(columns={year: f"fire_emissions_{year}__MgCO2e" for year in year_cols}, inplace=True)
+
+    # Join annual tables
+    annual_joined = gross_annual.merge(fire_annual, on=["ISO", "File"], how="left")
+
+    # Fill missing fire emissions with 0 for subtraction/QC
+    gross_cols = [f"gross_emissions_{year}__MgCO2e" for year in year_cols]
+    fire_cols = [f"fire_emissions_{year}__MgCO2e" for year in year_cols]
+
+    for col in gross_cols:
+        annual_joined[col] = annual_joined[col].fillna(0)
+    for col in fire_cols:
+        annual_joined[col] = annual_joined[col].fillna(0)
+
+    # TCLF total = fire emissions across all years
+    annual_joined["Annual_emissions_total"] = annual_joined[gross_cols].sum(axis=1, min_count=1)
+    annual_joined["TCLF_emissions_total"] = annual_joined[fire_cols].sum(axis=1, min_count=1)
 
     # Join annual output zonal stats to masked zonal stats
-    final_output = masked_output.set_index('File').join(annual_output.set_index('File'), on = "File")
-    final_output.reset_index(inplace=True)
+    final_output = masked_output.merge(annual_joined, on=["ISO", "File"], how="left")
 
-    # Make sure annual emission sums match
-    if final_output["File"].str.contains("emis", case=False, na=False).any():
-        mask = final_output["File"].str.contains("emis", case=False, na=False)
-        final_output.loc[mask, "AnnualQC"] = final_output.loc[mask, "Sum"].round() == final_output.loc[mask, "Annual_Sum"].round()
+    # QC columns for emissions rows
+    emis_mask = final_output["TCL_File"].str.contains("emis", case=False, na=False)
+
+    final_output.loc[emis_mask, "Annual_emissions_QC"] = (final_output.loc[emis_mask, "Total"].round()
+                                      == final_output.loc[emis_mask, "Annual_emissions_total"].round())
+
+    year_cols = [f"gross_emissions_{y}__MgCO2e" for y in range(2001, 2001 + cn.loss_years)]
+    fire_cols = [f"fire_emissions_{y}__MgCO2e" for y in range(2001, 2001 + cn.loss_years)]
+    final_cols = order[1:] + year_cols +  ["Annual_emissions_total", "Annual_emissions_QC"] + fire_cols + ["TCLF_emissions_total"]
+    final_output = final_output[final_cols]
 
     # Define the output location
     output_path = os.path.join(cn.csv_folder, "final_output.csv")
@@ -221,12 +298,17 @@ def check_aois(aois_folder):
     # Checking to see if the AOIS folder exists
     if os.path.isdir(aois_folder):
         print(f"    Success: {aois_folder} exists.")
-        # Checking to see if the AOIS folder has any shapefiles
-        aoi_list = pathjoin_files_in_directory(aois_folder, ".shp")
+        # Recursively search all subfolders for shapefiles
+        aoi_list = []
+        for root, dirs, files in os.walk(aois_folder):
+            for file in files:
+                if file.endswith(".shp"):
+                    aoi_list.append(os.path.join(root, file))
         if len(aoi_list) >= 1:
-            print(f"    Success: {aois_folder} contains {len(aoi_list)} shapefiles.")
+            print(f"    Success: {aois_folder} contains {len(aoi_list)} shapefile(s) across subfolders.")
         else:
-            raise Exception(f"  Failure: {aois_folder} does not contain a shapefile.")
+            raise Exception(
+                f"  Failure: {aois_folder} does not contain any shapefiles in this folder or its subfolders.")
     else:
         raise Exception(f"  Failure: {aois_folder} does not exist.")
 
@@ -278,9 +360,10 @@ def get_raster_name(raster):
     return os.path.splitext(os.path.basename(raster))[0]
 
 def get_gadm_boundary(country):
-    for f in pathjoin_files_in_directory(cn.aois_folder, ".shp"):
-        if country in f:
-            return f
+    for root, dirs, files in os.walk(cn.aois_folder):
+        for f in files:
+            if f.lower().endswith(".shp") and country in f:
+                return os.path.join(root, f)
 
 def clip_to_gadm(country, input_raster, output_raster):
     clip_feature = get_gadm_boundary(country)
@@ -343,7 +426,7 @@ def and_mask_logic(raster1, raster2, raster1_value=None, raster2_value=None):
     output_mask = arcpy.sa.Con(arcpy.Raster(r1_and_r2_mask) > 0, 1, 0)
     return output_mask
 
-def process_tcd_masks(tile_id, tcd, mask_tiles, tcd_threshold, gain, save_intermediates):
+def process_tcd_masks(tile_id, tcd, mask_tiles, tcd_threshold):
     #Paths to Mask, Input files
     gain_raster_path = os.path.join(cn.gain_folder, f'{tile_id}_{cn.gain_local_pattern}.tif')
     whrc_raster_path = os.path.join(cn.whrc_folder, f'{tile_id}_{cn.whrc_s3_pattern}.tif')
@@ -360,52 +443,9 @@ def process_tcd_masks(tile_id, tcd, mask_tiles, tcd_threshold, gain, save_interm
         tcd_whrc_mask = and_mask_logic(tcd, whrc_raster_path, tcd_val, 0)
         mask_path_tcd = os.path.join(mask_tiles, f'{tile_id}_tcd{tcd_val}')
 
-        if save_intermediates == True:
-            # Conditional logic for TCD AND biomass NOT Pre-2000 Plantation
-            if os.path.exists(plantation_raster_path):
-                tcd_noplantation_mask = and_mask_logic(tcd_whrc_mask, plantation_raster)
-                mask_path_tcd_noplantation = f'{mask_path_tcd}_notPlantation'
-
-                # Saving the tcd_noplantation mask
-                print(f'    Saving {mask_path_tcd_noplantation}.tif')
-                tcd_noplantation_mask = arcpy.sa.SetNull(tcd_noplantation_mask == 0, tcd_noplantation_mask)
-                tcd_noplantation_mask.save(f'{mask_path_tcd_noplantation}.tif')
-                print(f'    Successfully finished')
-
-            else:
-                # Saving the tcd mask
-                print(f'    Saving {mask_path_tcd}.tif')
-                tcd_whrc_mask = arcpy.sa.SetNull(tcd_whrc_mask == 0, tcd_whrc_mask)
-                tcd_whrc_mask.save(f'{mask_path_tcd}.tif')
-                print(f'    Successfully finished')
-
-        if gain == True:
-            # Conditional logic for TCD AND biomass OR gain
-            tcd_gain_mask = or_mask_logic(gain_raster_path, tcd_whrc_mask, 0)
-            mask_path_tcd_gain = f'{mask_path_tcd}_gain'
-
-            if save_intermediates == True:
-                # Conditional logic for TCD AND biomass OR gain NOT Pre-2000 Plantation
-                if os.path.exists(plantation_raster_path):
-                    tcd_gain_noplantation_mask = and_mask_logic(tcd_gain_mask, plantation_raster)
-                    mask_path_tcd_gain_noplantation = f'{mask_path_tcd_gain}_notPlantation'
-
-                    # Saving the tcd_gain_noplantation mask
-                    print(f'    Saving {mask_path_tcd_gain_noplantation}.tif')
-                    tcd_gain_noplantation_mask = arcpy.sa.SetNull(tcd_gain_noplantation_mask == 0, tcd_gain_noplantation_mask)
-                    tcd_gain_noplantation_mask.save(f'{mask_path_tcd_gain_noplantation}.tif')
-                    print(f'    Successfully finished')
-
-                else:
-                    # Saving the tcd_gain mask
-                    print(f'    Saving {mask_path_tcd_gain}.tif')
-                    tcd_gain_mask = arcpy.sa.SetNull(tcd_gain_mask == 0, tcd_gain_mask)
-                    tcd_gain_mask.save(f'{mask_path_tcd_gain}.tif')
-                    print(f'    Successfully finished')
-
-        else:
-            mask_path_tcd_gain = mask_path_tcd
-            tcd_gain_mask = tcd_whrc_mask
+        # Conditional logic for TCD AND biomass OR gain
+        tcd_gain_mask = or_mask_logic(gain_raster_path, tcd_whrc_mask, 0)
+        mask_path_tcd_gain = f'{mask_path_tcd}_gain'
 
         if os.path.exists(mangrove_raster_path):
             # Conditional logic for TCD AND biomass OR gain OR mangrove
@@ -433,6 +473,27 @@ def process_tcd_masks(tile_id, tcd, mask_tiles, tcd_threshold, gain, save_interm
                 tcd_gain_mangrove_mask.save(f'{mask_path_tcd_gain_mangrove}.tif')
                 print(f'    Successfully finished')
 
+        #If no mangrove tile
+        else:
+            # Conditional logic for TCD AND biomass OR gain NOT Pre-2000 Plantation
+            if os.path.exists(plantation_raster_path):
+                tcd_gain_noplantation_raster = arcpy.sa.Times(tcd_gain_mask, plantation_raster)
+                tcd_gain_noplantation_mask = arcpy.sa.Con(arcpy.Raster(tcd_gain_noplantation_raster) > 0, 1, 0)
+                mask_path_tcd_gain_noplantation = f'{mask_path_tcd_gain}_notPlantation'
+
+                # Saving the tcd_gain_noplantation mask
+                print(f'    Saving {mask_path_tcd_gain_noplantation}.tif')
+                tcd_gain_noplantation_mask = arcpy.sa.SetNull(tcd_gain_noplantation_mask == 0, tcd_gain_noplantation_mask)
+                tcd_gain_noplantation_mask.save(f'{mask_path_tcd_gain_noplantation}.tif')
+                print(f'    Successfully finished')
+
+            else:
+                # Saving tcd_gain mask
+                print(f'Saving {mask_path_tcd_gain}.tif')
+                tcd_gain_mask = arcpy.sa.SetNull(tcd_gain_mask == 0, tcd_gain_mask)
+                tcd_gain_mask.save(f'{mask_path_tcd_gain}.tif')
+                print(f'    Successfully finished')
+
 def process_zonal_statistics(aoi, aoi_name, raster_list, mask_list, output_folder, stat_type):
     for raster in raster_list:
         raster_name = get_raster_name(raster)
@@ -454,6 +515,9 @@ def process_zonal_statistics(aoi, aoi_name, raster_list, mask_list, output_folde
                 elif stat_type == "annual":
                     output_name = "{}_{}.dbf".format("TCL_annualized" + "_" +  str(get_country_id(aoi_name)), str(raster_name) + "_" + str(mask_name))
                     csv_file = "{}_{}.csv".format("TCL_annualized" + "_" +  str(get_country_id(aoi_name)), str(raster_name) + "_" + str(mask_name))
+                elif stat_type == "tclf":
+                    output_name = "{}_{}.dbf".format("TCL_fire_annualized" + "_" + str(get_country_id(aoi_name)), str(raster_name) + "_" + str(mask_name))
+                    csv_file = "{}_{}.csv".format("TCL_fire_annualized" + "_" + str(get_country_id(aoi_name)), str(raster_name) + "_" + str(mask_name))
                 output_path = os.path.join(output_folder, output_name)
 
                 masked_raster = arcpy.sa.Times(raster_obj, mask_obj)
@@ -473,7 +537,23 @@ def clean_zonal_stats_csv(input_folders, df):
                 csv_df = pd.read_csv(os.path.join(folder, file))
 
                 # Add column with name of the file
-                csv_df["File"] = file
+                csv_df["TCL_File"] = file
+
+                # Tile_ID -> ISO lookup
+                tile_match = re.search(r"[0-9]{2}[NS]_[0-9]{2,3}[EW]", file)
+                if tile_match:
+                    tile_id = tile_match.group()
+                    iso = next((k for k, v in cn.tile_dictionary.items() if v == tile_id), pd.NA)
+                    csv_df["ISO"] = iso
+                else:
+                    csv_df["ISO"] = pd.NA
+
+                if file.startswith("TCL_annualized_"):
+                    csv_df["File"] = re.sub(r"^TCL_annualized_[A-Z]{3}_", "", file)
+                elif file.startswith("TCL_fire_annualized_"):
+                    csv_df["File"] = re.sub(r"^TCL_fire_annualized_[A-Z]{3}_", "", file)
+                else:
+                    csv_df["File"] = re.sub(r"^TCL_", "", file)
 
                 # Define type of calc
                 if "emis" in file:
@@ -548,11 +628,11 @@ def s3_file_download(source, dest, pattern=''):
 
     try:
         tile_id = get_tile_id(file_name)
-    except:
-        pass
+    except Exception as e:
+        print_log(f"    Warning: could not parse tile_id from {file_name}: {e}")
 
     # Special download procedures for tree cover gain because the tiles have no pattern, just an ID.
-    # Tree cover gain tiles are renamed as their downloaded to get a pattern added to them.
+    # Tree cover gain tiles are renamed as they are downloaded to get a pattern added to them.
     if dir == cn.gain_s3_path[:-1]: # Delete last character of gain_dir because it has the terminal / while dir does not have terminal /
         local_file_name = f'{tile_id}_{pattern}.tif'
         print(f'    Option 1: Checking if {local_file_name} is already downloaded...')
